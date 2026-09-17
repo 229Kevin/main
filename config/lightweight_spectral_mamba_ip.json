@@ -1,0 +1,33 @@
+{
+    "model": {
+        "n_groups": [4],
+        "patch_size": 7,
+        "in_chans": 200,
+        "num_classes": 16,
+        "dims": [64],
+        "ssm_d_state": 16,
+        "ssm_ratio": 2,
+        "ssm_dt_rank": "auto",
+        "ssm_act_layer": "silu",
+        "ssm_conv": 0,
+        "ssm_conv_bias": true,
+        "ssm_drop_rate": 0,
+        "ssm_init": "v0",
+        "forward_type": "v3noz"
+    },
+    "schedule": {
+        "optimizer": {
+            "name": "AdamW",
+            "params": {
+                "lr": 0.001
+            }
+        },
+        "lr_decay": {
+            "name": "StepLR",
+            "params": {
+                "step_size": 30,
+                "gamma": 0.9
+            }
+        }
+    }
+}

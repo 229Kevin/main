@@ -14,6 +14,8 @@ from .rs_mamba_ss import vmamba, rsm_group, asf_rsm_group, semamba
 from .msrnn import msrnn
 from .msrt import msrt
 from .ssmamba import ssmamba
+from .lightweight_spectral_mamba import lightweight_spectral_mamba
+from .basic_spa_spe_mamba import basic_spa_spe_mamba
 
 def get_model(model_config, model_name, dataset_name, patch_size):
     # example: model_name='cnn3d', dataset_name='pu'
@@ -64,6 +66,12 @@ def get_model(model_config, model_name, dataset_name, patch_size):
     
     elif model_name == 'asf_rsm_group':
         model = asf_rsm_group(model_config)
+
+    elif model_name == 'lightweight_spectral_mamba':
+        model = lightweight_spectral_mamba(model_config)
+
+    elif model_name == 'basic_spa_spe_mamba':
+        model = basic_spa_spe_mamba(model_config)
 
     elif model_name == 'msrnn':
         model = msrnn(model_config)

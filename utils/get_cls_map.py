@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import os
 
 def get_classification_map(y_pred, y, height, width):
     k = 0
@@ -101,6 +102,8 @@ def list_to_colormap(x_list, name):
     return y
 
 def classification_map(map, ground_truth, dpi, save_path):
+    save_parent = os.path.dirname(os.path.abspath(save_path))
+    os.makedirs(save_parent, exist_ok=True)
     fig = plt.figure(frameon=False)
     fig.set_size_inches(ground_truth.shape[1]*2.0/dpi, ground_truth.shape[0]*2.0/dpi)
 
@@ -112,6 +115,7 @@ def classification_map(map, ground_truth, dpi, save_path):
 
     ax.imshow(map)
     fig.savefig(save_path, dpi=dpi)
+    plt.close(fig)
 
     return 0
 

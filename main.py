@@ -33,6 +33,8 @@ class StreamToLogger(object):
 
 def setup_logging(log_filename='output.log'):
     """设置日志记录，同时记录到文件和控制台。"""
+    log_parent = os.path.dirname(os.path.abspath(log_filename))
+    os.makedirs(log_parent, exist_ok=True)
     logging.basicConfig(
         level=logging.INFO,
         format='%(message)s',
@@ -55,9 +57,12 @@ if __name__ == "__main__":
     parser.add_argument("--num_run", type=int, default=10) 
     parser.add_argument("--epoch", type=int, default=300)    
     parser.add_argument("--bs", type=int, default=64)  # bs = batch size  
-    parser.add_argument("--ratio", type=float, default=0.1)
+    parser.add_argument("--ratio", type=float, default=None,
+                        help="training ratio (default: 0.05 for IP, 0.1 for other datasets)")
     parser.add_argument("--disjoint", type=bool, default=False)
     opts = parser.parse_args()
+    if opts.ratio is None:
+        opts.ratio = 0.05 if opts.dataset_name == 'ip' else 0.1
     config_dir = os.path.join('config', '%s_%s.json' % (opts.model, opts.dataset_name))
     if os.path.exists(config_dir):
         model_config = json.load(open(config_dir, 'r'))
@@ -166,7 +171,7 @@ if __name__ == "__main__":
                 num_params = sum(p.numel() for p in module.parameters() if p.requires_grad)
                 # 打印模块名称和参数量
                 print(f"{name}: {num_params} parameters")
-            model.flops()
+            model.flops(shape=(1, num_bands, opts.patch_size, opts.patch_size))
         #print("total parameters: {}".format(total_params))'''
         optimizer, scheduler = load_scheduler(model_config['schedule'], opts.model, model)
 
