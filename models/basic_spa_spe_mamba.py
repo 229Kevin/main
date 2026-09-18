@@ -215,6 +215,13 @@ class SpatialSnakeMamba(nn.Module):
         order, inverse_order = _snake_indices(self.patch_size)
         self.register_buffer("snake_order", order, persistent=False)
         self.register_buffer("inverse_snake_order", inverse_order, persistent=False)
+        self.dynamic_pos = nn.Conv2d(
+            hidden_dim,
+            hidden_dim,
+            kernel_size=3,
+            padding=1,
+            groups=hidden_dim,
+        )
         self.norm = nn.LayerNorm(hidden_dim)
         self.mamba = EditableMambaCore(
             d_model=hidden_dim, num_directions=1, **mamba_kwargs
@@ -224,6 +231,9 @@ class SpatialSnakeMamba(nn.Module):
         batch, height, width, channels = x.shape
         if (height, width) != (self.patch_size, self.patch_size):
             raise ValueError("Spatial patch does not match configured patch_size")
+        spatial = x.permute(0, 3, 1, 2)
+        spatial = spatial + self.dynamic_pos(spatial)
+        x = spatial.permute(0, 2, 3, 1)
         sequence = self.norm(x).reshape(batch, height * width, channels)
         sequence = sequence.index_select(1, self.snake_order)
         output = self.mamba(sequence.unsqueeze(1)).squeeze(1)
@@ -316,7 +326,7 @@ class BasicSpaSpeMamba(nn.Module):
         ssm_d_state=16,
         ssm_ratio=2.0,
         ssm_dt_rank="auto",
-        ssm_conv=0,
+        ssm_conv=3,
         ssm_conv_bias=True,
         ssm_drop_rate=0.0,
         use_gate=False,

@@ -9,7 +9,7 @@
         "ssm_d_state": 16,
         "ssm_ratio": 2,
         "ssm_dt_rank": "auto",
-        "ssm_conv": 0,
+        "ssm_conv": 3,
         "ssm_conv_bias": true,
         "ssm_drop_rate": 0,
         "use_gate": false,

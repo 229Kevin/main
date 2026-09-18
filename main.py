@@ -62,7 +62,7 @@ if __name__ == "__main__":
     parser.add_argument("--disjoint", type=bool, default=False)
     opts = parser.parse_args()
     if opts.ratio is None:
-        opts.ratio = 0.05 if opts.dataset_name == 'ip' else 0.1
+        opts.ratio = 0.1 if opts.dataset_name == 'ip' else 0.1
     config_dir = os.path.join('config', '%s_%s.json' % (opts.model, opts.dataset_name))
     if os.path.exists(config_dir):
         model_config = json.load(open(config_dir, 'r'))
