@@ -253,6 +253,9 @@ class SpectralBiMamba(nn.Module):
         self.mamba = EditableMambaCore(
             d_model=spatial_dim, num_directions=2, **mamba_kwargs
         )
+        # Start from the original 0.5/0.5 average, then learn the relative
+        # importance of forward and backward spectral contexts.
+        self.direction_logits = nn.Parameter(torch.zeros(2))
 
     def forward(self, x):
         batch, height, width, channels = x.shape
@@ -269,7 +272,11 @@ class SpectralBiMamba(nn.Module):
         output = self.mamba(directions)
         forward = output[:, 0]
         backward = torch.flip(output[:, 1], dims=[1])
-        output = 0.5 * (forward + backward)
+        direction_weights = self.direction_logits.softmax(dim=0)
+        output = (
+            direction_weights[0] * forward
+            + direction_weights[1] * backward
+        )
         return rearrange(
             output,
             "b d (h w) -> b h w d",
