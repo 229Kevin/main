@@ -11,6 +11,7 @@ import math
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from einops import rearrange
 from timm.models.layers import DropPath, trunc_normal_
 
@@ -198,12 +199,169 @@ class EditableMambaCore(nn.Module):
             output = output * gate
         return self.dropout(self.out_proj(output))
 
+    def forward_bfs(self, sequences, state_fusion):
+        """Run two scans and fuse their recurrent states before readout."""
+        if sequences.ndim != 4:
+            raise ValueError(f"Expected [B,K,L,D], got {tuple(sequences.shape)}")
+        batch, directions, length, dimension = sequences.shape
+        if directions != 2 or self.num_directions != 2:
+            raise ValueError("BFS requires exactly two scan directions")
+        if dimension != self.d_model:
+            raise ValueError(f"Expected D={self.d_model}, got D={dimension}")
+
+        projected = self.in_proj(sequences)
+        if self.use_gate:
+            projected, gate = projected.chunk(2, dim=-1)
+            gate = self.act(gate)
+        else:
+            gate = None
+
+        if self.d_conv > 1:
+            projected = rearrange(projected, "b k l d -> (b k) d l")
+            projected = self.conv1d(projected)
+            projected = rearrange(
+                projected, "(b k) d l -> b k l d", b=batch, k=directions
+            )
+        projected = self.act(projected)
+
+        u = rearrange(projected, "b k l d -> b k d l")
+        x_dbl = torch.einsum("b k d l, k c d -> b k c l", u, self.x_proj_weight)
+        dt, state_b, state_c = torch.split(
+            x_dbl, [self.dt_rank, self.d_state, self.d_state], dim=2
+        )
+        raw_delta = torch.einsum(
+            "b k r l, k d r -> b k d l", dt, self.dt_proj_weight
+        )
+
+        output_dtype = u.dtype
+        u_float = u.float()
+        delta = F.softplus(
+            raw_delta.float() + self.dt_proj_bias.float()[None, :, :, None]
+        )
+        a = -torch.exp(self.A_logs.float()).view(
+            directions, self.d_inner, self.d_state
+        )
+        state = torch.zeros(
+            batch,
+            directions,
+            self.d_inner,
+            self.d_state,
+            device=u.device,
+            dtype=torch.float32,
+        )
+        state_steps = []
+        for index in range(length):
+            delta_t = delta[..., index]
+            input_t = u_float[..., index]
+            decay = torch.exp(delta_t.unsqueeze(-1) * a.unsqueeze(0))
+            state = (
+                decay * state
+                + delta_t.unsqueeze(-1)
+                * state_b[..., index].float().unsqueeze(2)
+                * input_t.unsqueeze(-1)
+            )
+            state_steps.append(state)
+        states = torch.stack(state_steps, dim=-1)
+
+        forward_state = states[:, 0]
+        backward_state = torch.flip(states[:, 1], dims=[-1])
+        fused_state = state_fusion(forward_state + backward_state)
+
+        forward_c = state_c[:, 0].float()
+        backward_c = torch.flip(state_c[:, 1].float(), dims=[-1])
+        forward_u = u_float[:, 0]
+        backward_u = torch.flip(u_float[:, 1], dims=[-1])
+        skip = self.Ds.float().view(directions, self.d_inner)
+        forward_output = (
+            (fused_state * forward_c.unsqueeze(1)).sum(dim=2)
+            + skip[0][None, :, None] * forward_u
+        )
+        backward_output = (
+            (fused_state * backward_c.unsqueeze(1)).sum(dim=2)
+            + skip[1][None, :, None] * backward_u
+        )
+        output = torch.stack([forward_output, backward_output], dim=1)
+        output = rearrange(output, "b k d l -> b k l d").to(output_dtype)
+        output = self.out_norm(output)
+        if gate is not None:
+            aligned_gate = torch.stack(
+                [gate[:, 0], torch.flip(gate[:, 1], dims=[1])], dim=1
+            )
+            output = output * aligned_gate
+        return self.dropout(self.out_proj(output))
+
 
 def _snake_indices(size):
     grid = torch.arange(size * size, dtype=torch.long).view(size, size)
     grid[1::2] = torch.flip(grid[1::2], dims=[1])
     order = grid.flatten()
     return order, torch.argsort(order)
+
+
+class ContinuousBandGroupTokenizer(nn.Module):
+    """Build ordered tokens from disjoint groups of adjacent physical bands."""
+
+    def __init__(self, in_chans, num_tokens):
+        super().__init__()
+        self.in_chans = int(in_chans)
+        self.num_tokens = int(num_tokens)
+        if not 0 < self.num_tokens <= self.in_chans:
+            raise ValueError("num_tokens must be in [1, in_chans]")
+
+        boundaries = torch.div(
+            torch.arange(self.num_tokens + 1) * self.in_chans,
+            self.num_tokens,
+            rounding_mode="floor",
+        )
+        group_mask = torch.zeros(self.num_tokens, self.in_chans, dtype=torch.bool)
+        for index in range(self.num_tokens):
+            group_mask[index, boundaries[index] : boundaries[index + 1]] = True
+        self.register_buffer("group_mask", group_mask, persistent=False)
+        self.band_logits = nn.Parameter(torch.zeros(self.in_chans))
+
+    def forward(self, x):
+        if x.ndim != 4 or x.shape[1] != self.in_chans:
+            raise ValueError(
+                f"Expected [B,{self.in_chans},H,W], got {tuple(x.shape)}"
+            )
+        logits = self.band_logits.unsqueeze(0).expand(self.num_tokens, -1)
+        logits = logits.masked_fill(~self.group_mask, float("-inf"))
+        weights = logits.softmax(dim=-1)
+        tokens = torch.einsum("tc,bchw->bthw", weights, x)
+        return rearrange(tokens, "b d h w -> b h w d")
+
+
+class BidirectionalFusionState(nn.Module):
+    """BFS group fusion over aligned recurrent spectral states."""
+
+    def __init__(self, d_inner, d_state, groups=8):
+        super().__init__()
+        self.d_inner = int(d_inner)
+        self.d_state = int(d_state)
+        self.state_width = self.d_inner * self.d_state
+        self.groups = int(groups)
+        if self.state_width % self.groups != 0:
+            raise ValueError("Flattened state width must be divisible by BFS groups")
+        self.group_fusion = nn.Conv1d(
+            self.state_width,
+            self.state_width,
+            kernel_size=1,
+            groups=self.groups,
+        )
+
+    def forward(self, state):
+        if state.ndim != 4 or state.shape[1:3] != (
+            self.d_inner,
+            self.d_state,
+        ):
+            raise ValueError(
+                "Expected BFS state "
+                f"[B,{self.d_inner},{self.d_state},L], got {tuple(state.shape)}"
+            )
+        batch, _, _, length = state.shape
+        state = state.reshape(batch, self.state_width, length)
+        state = F.gelu(self.group_fusion(state))
+        return state.reshape(batch, self.d_inner, self.d_state, length)
 
 
 class SpatialSnakeMamba(nn.Module):
@@ -242,7 +400,7 @@ class SpatialSnakeMamba(nn.Module):
 
 
 class SpectralBiMamba(nn.Module):
-    """Bidirectional Mamba over the latent spectral/channel sequence."""
+    """Bidirectional spectral Mamba with hidden-state BFS."""
 
     def __init__(self, patch_size, hidden_dim, **mamba_kwargs):
         super().__init__()
@@ -253,8 +411,10 @@ class SpectralBiMamba(nn.Module):
         self.mamba = EditableMambaCore(
             d_model=spatial_dim, num_directions=2, **mamba_kwargs
         )
-        # Start from the original 0.5/0.5 average, then learn the relative
-        # importance of forward and backward spectral contexts.
+        self.state_fusion = BidirectionalFusionState(
+            self.mamba.d_inner, self.mamba.d_state
+        )
+        # Retain the best-performing global adaptive readout after BFS.
         self.direction_logits = nn.Parameter(torch.zeros(2))
 
     def forward(self, x):
@@ -269,9 +429,9 @@ class SpectralBiMamba(nn.Module):
         directions = torch.stack(
             [sequence, torch.flip(sequence, dims=[1])], dim=1
         )
-        output = self.mamba(directions)
+        output = self.mamba.forward_bfs(directions, self.state_fusion)
         forward = output[:, 0]
-        backward = torch.flip(output[:, 1], dims=[1])
+        backward = output[:, 1]
         direction_weights = self.direction_logits.softmax(dim=0)
         output = (
             direction_weights[0] * forward
@@ -313,8 +473,9 @@ class BasicSpaSpeBlock(nn.Module):
             drop=mlp_drop_rate,
         )
 
-    def forward(self, x):
-        fused = self.spatial(x) + self.spectral(x)
+    def forward(self, x, spectral_tokens=None):
+        spectral_input = x if spectral_tokens is None else spectral_tokens
+        fused = self.spatial(x) + self.spectral(spectral_input)
         x = x + self.drop_path(fused)
         return x + self.drop_path(self.ffn(self.norm_ffn(x)))
 
@@ -364,6 +525,9 @@ class BasicSpaSpeMamba(nn.Module):
             embed_dim=hidden_dim,
             n_groups=group_count,
         )
+        self.spectral_tokenizer = ContinuousBandGroupTokenizer(
+            in_chans=in_chans, num_tokens=hidden_dim
+        )
 
         drop_paths = torch.linspace(0, drop_path_rate, depths[0]).tolist()
         mamba_kwargs = dict(
@@ -375,8 +539,8 @@ class BasicSpaSpeMamba(nn.Module):
             dropout=ssm_drop_rate,
             use_gate=use_gate,
         )
-        self.blocks = nn.Sequential(
-            *[
+        self.blocks = nn.ModuleList(
+            [
                 BasicSpaSpeBlock(
                     patch_size=patch_size,
                     hidden_dim=hidden_dim,
@@ -406,9 +570,12 @@ class BasicSpaSpeMamba(nn.Module):
         expected = (self.in_chans, self.patch_size, self.patch_size)
         if x.ndim != 5 or x.shape[1] != 1 or tuple(x.shape[2:]) != expected:
             raise ValueError(f"Expected [B,1,{expected[0]},{expected[1]},{expected[2]}], got {tuple(x.shape)}")
+        raw_hsi = x.squeeze(1)
+        spectral_tokens = self.spectral_tokenizer(raw_hsi)
         x = self.pad(x).squeeze(1)
         x = self.group_emb(rearrange(x, "b c h w -> b h w c"))
-        x = self.blocks(x)
+        for block in self.blocks:
+            x = block(x, spectral_tokens)
         return self.norm(x).mean(dim=(1, 2))
 
     def forward(self, x):
@@ -436,6 +603,8 @@ def basic_spa_spe_mamba(model_config):
 
 __all__ = [
     "EditableMambaCore",
+    "ContinuousBandGroupTokenizer",
+    "BidirectionalFusionState",
     "SpatialSnakeMamba",
     "SpectralBiMamba",
     "BasicSpaSpeBlock",

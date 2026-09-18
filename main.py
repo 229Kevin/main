@@ -54,7 +54,7 @@ if __name__ == "__main__":
     parser.add_argument("--dataset_dir", type=str, default="./datasets")
     parser.add_argument("--device", type=str, default="0")
     parser.add_argument("--patch_size", type=int, default=7)
-    parser.add_argument("--num_run", type=int, default=10) 
+    parser.add_argument("--num_run", type=int, default=5)
     parser.add_argument("--epoch", type=int, default=300)    
     parser.add_argument("--bs", type=int, default=64)  # bs = batch size  
     parser.add_argument("--ratio", type=float, default=None,
