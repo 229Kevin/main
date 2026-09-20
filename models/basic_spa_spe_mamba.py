@@ -8,6 +8,7 @@ require editing ``rs_mamba_ss.py``.
 
 import copy
 import math
+from typing import NamedTuple, Optional
 
 import torch
 import torch.nn as nn
@@ -16,6 +17,13 @@ from einops import rearrange
 from timm.models.layers import DropPath, trunc_normal_
 
 from .rs_mamba_ss import GroupedPixelEmbedding_mm, Mlp, SelectiveScanOflex
+
+
+class SharedScanInternals(NamedTuple):
+    states: torch.Tensor
+    state_c: torch.Tensor
+    u: torch.Tensor
+    gate: Optional[torch.Tensor]
 
 
 class EditableMambaCore(nn.Module):
@@ -247,6 +255,92 @@ class EditableMambaCore(nn.Module):
             output = output * gate
         return self.dropout(self.out_proj(output))
 
+    def scan_states_shared(
+        self, sequences, parameter_features=None, reliability=None
+    ):
+        """Expose shared-parameter recurrent states before C/D observation."""
+        if sequences.ndim != 4 or self.num_directions != 1:
+            raise ValueError(
+                "scan_states_shared expects [B,K,L,D] and num_directions=1"
+            )
+        batch, directions, length, dimension = sequences.shape
+        if dimension != self.d_model:
+            raise ValueError(f"Expected D={self.d_model}, got D={dimension}")
+
+        projected = self.in_proj(sequences)
+        if self.use_gate:
+            projected, gate = projected.chunk(2, dim=-1)
+            gate = self.act(gate)
+        else:
+            gate = None
+        if self.d_conv > 1:
+            projected = rearrange(projected, "b k l d -> (b k) d l")
+            projected = self.conv1d(projected)
+            projected = rearrange(
+                projected, "(b k) d l -> b k l d", b=batch, k=directions
+            )
+        projected = self.act(projected)
+        parameter_source = projected if parameter_features is None else parameter_features
+        if parameter_source.shape != projected.shape:
+            raise ValueError("parameter_features must match projected content shape")
+        if reliability is not None and reliability.shape != (batch, directions, length):
+            raise ValueError("reliability must have shape [B,K,L]")
+
+        u = rearrange(projected, "b k l d -> (b k) d l")
+        source = rearrange(parameter_source, "b k l d -> (b k) d l")
+        x_dbl = torch.einsum("b d l, c d -> b c l", source, self.x_proj_weight[0])
+        dt, state_b, state_c = torch.split(
+            x_dbl, [self.dt_rank, self.d_state, self.d_state], dim=1
+        )
+        if reliability is not None:
+            state_b = state_b * reliability.reshape(batch * directions, 1, length)
+        raw_delta = torch.einsum("b r l, d r -> b d l", dt, self.dt_proj_weight[0])
+        delta = F.softplus(raw_delta.float() + self.dt_proj_bias[0].float()[None, :, None])
+        a = -torch.exp(self.A_logs.float()).view(self.d_inner, self.d_state)
+        state = torch.zeros(
+            batch * directions,
+            self.d_inner,
+            self.d_state,
+            device=sequences.device,
+            dtype=torch.float32,
+        )
+        state_steps = []
+        for index in range(length):
+            delta_t = delta[..., index]
+            input_t = u[..., index].float()
+            state = (
+                torch.exp(delta_t.unsqueeze(-1) * a.unsqueeze(0)) * state
+                + delta_t.unsqueeze(-1)
+                * state_b[..., index].float().unsqueeze(1)
+                * input_t.unsqueeze(-1)
+            )
+            state_steps.append(state)
+        states = torch.stack(state_steps, dim=-1).view(
+            batch, directions, self.d_inner, self.d_state, length
+        )
+        return SharedScanInternals(
+            states=states,
+            state_c=state_c.view(batch, directions, self.d_state, length),
+            u=u.view(batch, directions, self.d_inner, length),
+            gate=gate,
+        )
+
+    def observe_shared(self, fused_state, state_c, u, gate=None):
+        """Observe aligned paths from one fused pre-observation state."""
+        if fused_state.ndim != 4 or state_c.ndim != 4 or u.ndim != 4:
+            raise ValueError("Invalid shared observation tensor rank")
+        output = (
+            (fused_state[:, None] * state_c[:, :, None].float()).sum(dim=3)
+            + self.Ds.float().view(self.num_directions, self.d_inner)[0]
+            [None, None, :, None]
+            * u.float()
+        )
+        output = rearrange(output, "b k d l -> b k l d").to(u.dtype)
+        output = self.out_norm(output)
+        if gate is not None:
+            output = output * gate
+        return self.dropout(self.out_proj(output))
+
     def forward_bfs(self, sequences, state_fusion):
         """Run two scans and fuse their recurrent states before readout."""
         if sequences.ndim != 4:
@@ -464,6 +558,24 @@ class BidirectionalFusionState(nn.Module):
         return state.reshape(batch, self.d_inner, self.d_state, length)
 
 
+class CompressedSpatialStateFusion(nn.Module):
+    def __init__(self, d_inner, d_state, compressed_dim):
+        super().__init__()
+        self.d_inner, self.d_state = int(d_inner), int(d_state)
+        width = self.d_inner * self.d_state
+        self.down = nn.Conv1d(width, int(compressed_dim), 1)
+        self.up = nn.Conv1d(int(compressed_dim), width, 1)
+
+    def forward(self, states, weights):
+        batch, paths, _, _, length = states.shape
+        down = self.down(states.reshape(batch * paths, -1, length))
+        down = down.view(batch, paths, -1, length)
+        fused = torch.einsum("k,bkcl->bcl", weights, down)
+        return self.up(fused).view(
+            batch, self.d_inner, self.d_state, length
+        )
+
+
 class BoundaryReliability(nn.Module):
     def __init__(self, hidden_dim, mlp_hidden_dim=32):
         super().__init__()
@@ -501,10 +613,16 @@ class SpatialMultiPathMamba(nn.Module):
         spa_scan="snake_single",
         spa_boundary_injection=False,
         spa_context_params=False,
+        spa_state_fusion="none",
+        spa_state_compress_dim=32,
         **mamba_kwargs,
     ):
         super().__init__()
         self.patch_size = int(patch_size)
+        if spa_state_fusion not in ("none", "compressed"):
+            raise ValueError("Unsupported spa_state_fusion")
+        if spa_state_fusion == "compressed" and spa_scan != "ring_bidir":
+            raise ValueError("compressed state fusion requires ring_bidir")
         orders = build_spatial_orders(spa_scan, self.patch_size)
         self.num_paths = len(orders)
         self.register_buffer("orders", torch.stack(orders), persistent=False)
@@ -537,6 +655,15 @@ class SpatialMultiPathMamba(nn.Module):
             )
             if spa_context_params else None
         )
+        self.state_fusion = (
+            CompressedSpatialStateFusion(
+                self.mamba.d_inner,
+                self.mamba.d_state,
+                spa_state_compress_dim,
+            )
+            if spa_state_fusion == "compressed"
+            else None
+        )
         self.direction_logits = (
             nn.Parameter(torch.zeros(self.num_paths)) if self.num_paths > 1 else None
         )
@@ -552,6 +679,13 @@ class SpatialMultiPathMamba(nn.Module):
     def _align_paths(self, paths):
         return torch.stack(
             [paths[:, index].index_select(1, inverse)
+             for index, inverse in enumerate(self.inverse_orders)],
+            dim=1,
+        )
+
+    def _align_path_last_dimension(self, paths):
+        return torch.stack(
+            [paths[:, index].index_select(-1, inverse)
              for index, inverse in enumerate(self.inverse_orders)],
             dim=1,
         )
@@ -590,12 +724,33 @@ class SpatialMultiPathMamba(nn.Module):
             reliability = self._gather_paths(
                 self.boundary_reliability(spectral_tokens).unsqueeze(-1)
             ).squeeze(-1)
-        output = self.mamba.forward_shared(
-            sequences,
-            parameter_features=parameter_features,
-            reliability=reliability,
-        )
-        output = self._combine_paths(self._align_paths(output))
+        if self.state_fusion is None:
+            output = self.mamba.forward_shared(
+                sequences,
+                parameter_features=parameter_features,
+                reliability=reliability,
+            )
+            output = self._align_paths(output)
+        else:
+            internals = self.mamba.scan_states_shared(
+                sequences,
+                parameter_features=parameter_features,
+                reliability=reliability,
+            )
+            states = self._align_path_last_dimension(internals.states)
+            state_c = self._align_path_last_dimension(internals.state_c)
+            u = self._align_path_last_dimension(internals.u)
+            gate = (
+                None
+                if internals.gate is None
+                else self._align_paths(internals.gate)
+            )
+            weights = self.direction_logits.softmax(dim=0)
+            fused_state = self.state_fusion(states, weights)
+            output = self.mamba.observe_shared(
+                fused_state, state_c, u, gate=gate
+            )
+        output = self._combine_paths(output)
         return output.view(batch, height, width, channels)
 
 
@@ -704,6 +859,13 @@ class BasicSpaSpeMamba(nn.Module):
         mlp_ratio=4.0,
         mlp_drop_rate=0.0,
         drop_path_rate=0.1,
+        spa_scan="snake_single",
+        spa_shared_ssm=True,
+        spa_center_readout=False,
+        spa_boundary_injection=False,
+        spa_context_params=False,
+        spa_state_fusion="none",
+        spa_state_compress_dim=32,
         **kwargs,
     ):
         super().__init__()
@@ -714,6 +876,14 @@ class BasicSpaSpeMamba(nn.Module):
             raise ValueError("patch_size must be a positive odd integer")
         if depths[0] < 1:
             raise ValueError("depths[0] must be positive")
+        if not spa_shared_ssm:
+            raise ValueError("spa_shared_ssm must be true")
+        if spa_state_fusion not in ("none", "compressed"):
+            raise ValueError("Unsupported spa_state_fusion")
+        if spa_state_fusion == "compressed" and spa_scan != "ring_bidir":
+            raise ValueError("compressed state fusion requires ring_bidir")
+        if int(spa_state_compress_dim) <= 0:
+            raise ValueError("spa_state_compress_dim must be positive")
 
         self.patch_size = int(patch_size)
         self.in_chans = int(in_chans)
@@ -805,9 +975,11 @@ def basic_spa_spe_mamba(model_config):
 
 
 __all__ = [
+    "SharedScanInternals",
     "EditableMambaCore",
     "ContinuousBandGroupTokenizer",
     "BidirectionalFusionState",
+    "CompressedSpatialStateFusion",
     "BoundaryReliability",
     "center_mean_pool",
     "SpatialSnakeMamba",
