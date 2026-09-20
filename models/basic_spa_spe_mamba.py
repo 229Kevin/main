@@ -464,10 +464,45 @@ class BidirectionalFusionState(nn.Module):
         return state.reshape(batch, self.d_inner, self.d_state, length)
 
 
+class BoundaryReliability(nn.Module):
+    def __init__(self, hidden_dim, mlp_hidden_dim=32):
+        super().__init__()
+        self.mlp = nn.Sequential(
+            nn.Linear(hidden_dim * 3 + 1, mlp_hidden_dim),
+            nn.GELU(),
+            nn.Linear(mlp_hidden_dim, 1),
+        )
+
+    def forward(self, tokens):
+        _, height, width, _ = tokens.shape
+        center = tokens[:, height // 2, width // 2][:, None, None, :]
+        center = center.expand_as(tokens)
+        cosine = F.cosine_similarity(tokens, center, dim=-1, eps=1e-6).unsqueeze(-1)
+        features = torch.cat([tokens, center, (tokens - center).abs(), cosine], dim=-1)
+        reliability = 0.1 + 0.9 * torch.sigmoid(self.mlp(features).squeeze(-1))
+        mask = torch.zeros_like(reliability, dtype=torch.bool)
+        mask[:, height // 2, width // 2] = True
+        return reliability.masked_fill(mask, 1.0)
+
+
+def center_mean_pool(x, beta):
+    weight = torch.sigmoid(beta)
+    center = x[:, x.shape[1] // 2, x.shape[2] // 2]
+    return weight * center + (1.0 - weight) * x.mean(dim=(1, 2))
+
+
 class SpatialMultiPathMamba(nn.Module):
     """Shared Mamba over one or more aligned spatial paths."""
 
-    def __init__(self, patch_size, hidden_dim, spa_scan="snake_single", **mamba_kwargs):
+    def __init__(
+        self,
+        patch_size,
+        hidden_dim,
+        spa_scan="snake_single",
+        spa_boundary_injection=False,
+        spa_context_params=False,
+        **mamba_kwargs,
+    ):
         super().__init__()
         self.patch_size = int(patch_size)
         orders = build_spatial_orders(spa_scan, self.patch_size)
@@ -488,6 +523,19 @@ class SpatialMultiPathMamba(nn.Module):
         self.norm = nn.LayerNorm(hidden_dim)
         self.mamba = EditableMambaCore(
             d_model=hidden_dim, num_directions=1, **mamba_kwargs
+        )
+        self.boundary_reliability = (
+            BoundaryReliability(hidden_dim) if spa_boundary_injection else None
+        )
+        self.context_conv = (
+            nn.Conv2d(
+                self.mamba.d_inner,
+                self.mamba.d_inner,
+                kernel_size=3,
+                padding=1,
+                groups=self.mamba.d_inner,
+            )
+            if spa_context_params else None
         )
         self.direction_logits = (
             nn.Parameter(torch.zeros(self.num_paths)) if self.num_paths > 1 else None
@@ -515,15 +563,39 @@ class SpatialMultiPathMamba(nn.Module):
             "k,bklc->blc", self.direction_logits.softmax(dim=0), aligned
         )
 
-    def forward(self, x):
+    def _parameter_context(self, x):
+        if self.context_conv is None:
+            return None
+        projected = self.mamba.in_proj(x)
+        if self.mamba.use_gate:
+            projected, _ = projected.chunk(2, dim=-1)
+        local = self.context_conv(projected.permute(0, 3, 1, 2))
+        context = self.mamba.act(projected + local.permute(0, 2, 3, 1))
+        return self._gather_paths(context)
+
+    def forward(self, x, spectral_tokens=None):
         batch, height, width, channels = x.shape
         if (height, width) != (self.patch_size, self.patch_size):
             raise ValueError("Spatial patch does not match configured patch_size")
         spatial = x.permute(0, 3, 1, 2)
         spatial = spatial + self.dynamic_pos(spatial)
         x = spatial.permute(0, 2, 3, 1)
-        sequences = self._gather_paths(self.norm(x))
-        output = self._combine_paths(self._align_paths(self.mamba.forward_shared(sequences)))
+        normalized = self.norm(x)
+        sequences = self._gather_paths(normalized)
+        parameter_features = self._parameter_context(normalized)
+        reliability = None
+        if self.boundary_reliability is not None:
+            if spectral_tokens is None:
+                raise ValueError("spectral_tokens are required for boundary injection")
+            reliability = self._gather_paths(
+                self.boundary_reliability(spectral_tokens).unsqueeze(-1)
+            ).squeeze(-1)
+        output = self.mamba.forward_shared(
+            sequences,
+            parameter_features=parameter_features,
+            reliability=reliability,
+        )
+        output = self._combine_paths(self._align_paths(output))
         return output.view(batch, height, width, channels)
 
 
@@ -736,6 +808,8 @@ __all__ = [
     "EditableMambaCore",
     "ContinuousBandGroupTokenizer",
     "BidirectionalFusionState",
+    "BoundaryReliability",
+    "center_mean_pool",
     "SpatialSnakeMamba",
     "SpatialMultiPathMamba",
     "SpectralBiMamba",

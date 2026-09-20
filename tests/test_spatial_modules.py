@@ -2,7 +2,12 @@ import unittest
 
 import torch
 
-from models.basic_spa_spe_mamba import EditableMambaCore, SpatialMultiPathMamba
+from models.basic_spa_spe_mamba import (
+    BoundaryReliability,
+    EditableMambaCore,
+    SpatialMultiPathMamba,
+    center_mean_pool,
+)
 
 
 class ZeroPosition(torch.nn.Module):
@@ -33,6 +38,31 @@ class MultiPathTests(unittest.TestCase):
             lambda sequences, parameter_features=None, reliability=None: sequences
         )
         self.assertTrue(torch.equal(module(source), source))
+
+
+class GuidanceTests(unittest.TestCase):
+    def test_reliability_range_center_and_readout(self):
+        reliability = BoundaryReliability(8)(torch.randn(3, 7, 7, 8))
+        self.assertTrue(torch.all(reliability >= 0.1))
+        self.assertTrue(torch.all(reliability <= 1.0))
+        self.assertTrue(torch.equal(reliability[:, 3, 3], torch.ones(3)))
+        inputs = torch.randn(2, 7, 7, 8)
+        actual = center_mean_pool(inputs, torch.nn.Parameter(torch.zeros(())))
+        expected = 0.5 * inputs[:, 3, 3] + 0.5 * inputs.mean((1, 2))
+        self.assertTrue(torch.equal(actual, expected))
+
+    def test_context_shape(self):
+        module = SpatialMultiPathMamba(
+            7,
+            8,
+            spa_scan="ring_bidir",
+            spa_context_params=True,
+            d_state=4,
+            ssm_ratio=1,
+            d_conv=3,
+        )
+        context = module._parameter_context(torch.randn(2, 7, 7, 8))
+        self.assertEqual(tuple(context.shape), (2, 2, 49, module.mamba.d_inner))
 
 
 @unittest.skipUnless(torch.cuda.is_available(), "CUDA selective scan unavailable")
