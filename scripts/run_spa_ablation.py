@@ -89,6 +89,7 @@ def build_jobs(opts):
         raise ValueError("--ratio must be between zero and one")
     if opts.epochs < 1 or opts.batch_size < 1:
         raise ValueError("epochs and batch size must be positive")
+    experiment_root = opts.root if opts.root.is_absolute() else REPO_ROOT / opts.root
 
     jobs = []
     for stage in stages:
@@ -97,7 +98,7 @@ def build_jobs(opts):
         )
         _validate_config(stage, config_path)
         for seed in opts.seeds:
-            output_dir = opts.root / stage / f"seed_{seed}"
+            output_dir = experiment_root / stage / f"seed_{seed}"
             metrics_path = output_dir / "metrics.json"
             run_name = f"{stage}_seed{seed}"
             command = (
@@ -283,7 +284,7 @@ def main(argv=None):
         return 0
     for job in jobs:
         run_job(job, opts.ratio)
-    aggregate_results(jobs, opts.root)
+    aggregate_results(jobs, jobs[0].output_dir.parents[1])
     return 0
 
 

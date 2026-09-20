@@ -14,6 +14,7 @@ class SpaAblationRunnerTests(unittest.TestCase):
         self.assertEqual(len(jobs), 24)
         self.assertEqual({job.stage for job in jobs}, {f"S{i}" for i in range(8)})
         self.assertEqual({job.seed for job in jobs}, {1, 34, 20031025})
+        self.assertTrue(all(job.output_dir.is_absolute() for job in jobs))
         self.assertTrue(all("--ratio" in job.command for job in jobs))
         self.assertTrue(all("0.1" in job.command for job in jobs))
         self.assertTrue(all("--skip-map" in job.command for job in jobs))
