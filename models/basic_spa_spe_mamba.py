@@ -199,6 +199,54 @@ class EditableMambaCore(nn.Module):
             output = output * gate
         return self.dropout(self.out_proj(output))
 
+    def forward_shared(self, sequences, parameter_features=None, reliability=None):
+        """Process multiple paths with one shared SSM parameter group."""
+        if sequences.ndim != 4 or self.num_directions != 1:
+            raise ValueError("forward_shared expects [B,K,L,D] and num_directions=1")
+        batch, directions, length, dimension = sequences.shape
+        if dimension != self.d_model:
+            raise ValueError(f"Expected D={self.d_model}, got D={dimension}")
+        projected = self.in_proj(sequences)
+        if self.use_gate:
+            projected, gate = projected.chunk(2, dim=-1)
+            gate = self.act(gate)
+        else:
+            gate = None
+        if self.d_conv > 1:
+            projected = rearrange(projected, "b k l d -> (b k) d l")
+            projected = self.conv1d(projected)
+            projected = rearrange(
+                projected, "(b k) d l -> b k l d", b=batch, k=directions
+            )
+        projected = self.act(projected)
+        parameter_source = projected if parameter_features is None else parameter_features
+        if parameter_source.shape != projected.shape:
+            raise ValueError("parameter_features must match projected content shape")
+        if reliability is not None and reliability.shape != (batch, directions, length):
+            raise ValueError("reliability must have shape [B,K,L]")
+
+        u = rearrange(projected, "b k l d -> (b k) d l")
+        source = rearrange(parameter_source, "b k l d -> (b k) d l")
+        x_dbl = torch.einsum("b d l, c d -> b c l", source, self.x_proj_weight[0])
+        dt, state_b, state_c = torch.split(
+            x_dbl, [self.dt_rank, self.d_state, self.d_state], dim=1
+        )
+        if reliability is not None:
+            state_b = state_b * reliability.reshape(batch * directions, 1, length)
+        delta = torch.einsum("b r l, d r -> b d l", dt, self.dt_proj_weight[0])
+        output = SelectiveScanOflex.apply(
+            u.contiguous(), delta.contiguous(), -torch.exp(self.A_logs.float()),
+            state_b.unsqueeze(1).contiguous(), state_c.unsqueeze(1).contiguous(),
+            self.Ds.float(), self.dt_proj_bias[0].float(), True, -1, -1, True,
+        )
+        output = rearrange(
+            output, "(b k) d l -> b k l d", b=batch, k=directions
+        ).to(projected.dtype)
+        output = self.out_norm(output)
+        if gate is not None:
+            output = output * gate
+        return self.dropout(self.out_proj(output))
+
     def forward_bfs(self, sequences, state_fusion):
         """Run two scans and fuse their recurrent states before readout."""
         if sequences.ndim != 4:
@@ -416,15 +464,20 @@ class BidirectionalFusionState(nn.Module):
         return state.reshape(batch, self.d_inner, self.d_state, length)
 
 
-class SpatialSnakeMamba(nn.Module):
-    """Unidirectional Mamba over an S-shaped spatial sequence."""
+class SpatialMultiPathMamba(nn.Module):
+    """Shared Mamba over one or more aligned spatial paths."""
 
-    def __init__(self, patch_size, hidden_dim, **mamba_kwargs):
+    def __init__(self, patch_size, hidden_dim, spa_scan="snake_single", **mamba_kwargs):
         super().__init__()
         self.patch_size = int(patch_size)
-        order, inverse_order = _snake_indices(self.patch_size)
-        self.register_buffer("snake_order", order, persistent=False)
-        self.register_buffer("inverse_snake_order", inverse_order, persistent=False)
+        orders = build_spatial_orders(spa_scan, self.patch_size)
+        self.num_paths = len(orders)
+        self.register_buffer("orders", torch.stack(orders), persistent=False)
+        self.register_buffer(
+            "inverse_orders",
+            torch.stack([torch.argsort(order) for order in orders]),
+            persistent=False,
+        )
         self.dynamic_pos = nn.Conv2d(
             hidden_dim,
             hidden_dim,
@@ -436,6 +489,31 @@ class SpatialSnakeMamba(nn.Module):
         self.mamba = EditableMambaCore(
             d_model=hidden_dim, num_directions=1, **mamba_kwargs
         )
+        self.direction_logits = (
+            nn.Parameter(torch.zeros(self.num_paths)) if self.num_paths > 1 else None
+        )
+
+    def _gather_paths(self, feature_map):
+        flat = feature_map.reshape(
+            feature_map.shape[0], self.patch_size ** 2, feature_map.shape[-1]
+        )
+        return torch.stack(
+            [flat.index_select(1, order) for order in self.orders], dim=1
+        )
+
+    def _align_paths(self, paths):
+        return torch.stack(
+            [paths[:, index].index_select(1, inverse)
+             for index, inverse in enumerate(self.inverse_orders)],
+            dim=1,
+        )
+
+    def _combine_paths(self, aligned):
+        if self.num_paths == 1:
+            return aligned[:, 0]
+        return torch.einsum(
+            "k,bklc->blc", self.direction_logits.softmax(dim=0), aligned
+        )
 
     def forward(self, x):
         batch, height, width, channels = x.shape
@@ -444,11 +522,12 @@ class SpatialSnakeMamba(nn.Module):
         spatial = x.permute(0, 3, 1, 2)
         spatial = spatial + self.dynamic_pos(spatial)
         x = spatial.permute(0, 2, 3, 1)
-        sequence = self.norm(x).reshape(batch, height * width, channels)
-        sequence = sequence.index_select(1, self.snake_order)
-        output = self.mamba(sequence.unsqueeze(1)).squeeze(1)
-        output = output.index_select(1, self.inverse_snake_order)
+        sequences = self._gather_paths(self.norm(x))
+        output = self._combine_paths(self._align_paths(self.mamba.forward_shared(sequences)))
         return output.view(batch, height, width, channels)
+
+
+SpatialSnakeMamba = SpatialMultiPathMamba
 
 
 class SpectralBiMamba(nn.Module):
@@ -658,6 +737,7 @@ __all__ = [
     "ContinuousBandGroupTokenizer",
     "BidirectionalFusionState",
     "SpatialSnakeMamba",
+    "SpatialMultiPathMamba",
     "SpectralBiMamba",
     "BasicSpaSpeBlock",
     "BasicSpaSpeMamba",
