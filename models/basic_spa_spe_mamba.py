@@ -291,10 +291,62 @@ class EditableMambaCore(nn.Module):
         return self.dropout(self.out_proj(output))
 
 
-def _snake_indices(size):
+def _row_snake_order(size):
     grid = torch.arange(size * size, dtype=torch.long).view(size, size)
     grid[1::2] = torch.flip(grid[1::2], dims=[1])
-    order = grid.flatten()
+    return grid.flatten()
+
+
+def _column_snake_order(size):
+    grid = torch.arange(size * size, dtype=torch.long).view(size, size)
+    grid[:, 1::2] = torch.flip(grid[:, 1::2], dims=[0])
+    return grid.transpose(0, 1).flatten()
+
+
+def _outside_in_spiral_order(size):
+    coordinates = []
+    top, bottom = 0, size - 1
+    left, right = 0, size - 1
+    while top <= bottom and left <= right:
+        for column in range(left, right + 1):
+            coordinates.append((top, column))
+        top += 1
+        for row in range(top, bottom + 1):
+            coordinates.append((row, right))
+        right -= 1
+        if top <= bottom:
+            for column in range(right, left - 1, -1):
+                coordinates.append((bottom, column))
+            bottom -= 1
+        if left <= right:
+            for row in range(bottom, top - 1, -1):
+                coordinates.append((row, left))
+            left += 1
+    return torch.tensor(
+        [row * size + column for row, column in coordinates], dtype=torch.long
+    )
+
+
+def build_spatial_orders(scan, size):
+    size = int(size)
+    if size <= 0 or size % 2 == 0:
+        raise ValueError("Spatial patch size must be a positive odd integer")
+    row = _row_snake_order(size)
+    if scan == "snake_single":
+        return (row,)
+    if scan == "snake_bidir":
+        return row, torch.flip(row, dims=[0])
+    if scan == "cross4":
+        column = _column_snake_order(size)
+        return row, torch.flip(row, dims=[0]), column, torch.flip(column, dims=[0])
+    if scan == "ring_bidir":
+        ring = _outside_in_spiral_order(size)
+        return ring, torch.flip(ring, dims=[0])
+    raise ValueError(f"Unsupported spa_scan: {scan}")
+
+
+def _snake_indices(size):
+    order = build_spatial_orders("snake_single", size)[0]
     return order, torch.argsort(order)
 
 
