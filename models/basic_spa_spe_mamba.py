@@ -813,11 +813,23 @@ class BasicSpaSpeBlock(nn.Module):
         drop_path=0.0,
         mlp_ratio=4.0,
         mlp_drop_rate=0.0,
+        spa_scan="snake_single",
+        spa_boundary_injection=False,
+        spa_context_params=False,
+        spa_state_fusion="none",
+        spa_state_compress_dim=32,
         **mamba_kwargs,
     ):
         super().__init__()
         self.spatial = SpatialSnakeMamba(
-            patch_size, hidden_dim, **mamba_kwargs
+            patch_size,
+            hidden_dim,
+            spa_scan=spa_scan,
+            spa_boundary_injection=spa_boundary_injection,
+            spa_context_params=spa_context_params,
+            spa_state_fusion=spa_state_fusion,
+            spa_state_compress_dim=spa_state_compress_dim,
+            **mamba_kwargs,
         )
         self.spectral = SpectralBiMamba(
             patch_size, hidden_dim, **mamba_kwargs
@@ -833,7 +845,7 @@ class BasicSpaSpeBlock(nn.Module):
 
     def forward(self, x, spectral_tokens=None):
         spectral_input = x if spectral_tokens is None else spectral_tokens
-        fused = self.spatial(x) + self.spectral(spectral_input)
+        fused = self.spatial(x, spectral_tokens) + self.spectral(spectral_input)
         x = x + self.drop_path(fused)
         return x + self.drop_path(self.ffn(self.norm_ffn(x)))
 
@@ -878,6 +890,8 @@ class BasicSpaSpeMamba(nn.Module):
             raise ValueError("depths[0] must be positive")
         if not spa_shared_ssm:
             raise ValueError("spa_shared_ssm must be true")
+        if spa_scan not in ("snake_single", "snake_bidir", "cross4", "ring_bidir"):
+            raise ValueError(f"Unsupported spa_scan: {spa_scan}")
         if spa_state_fusion not in ("none", "compressed"):
             raise ValueError("Unsupported spa_state_fusion")
         if spa_state_fusion == "compressed" and spa_scan != "ring_bidir":
@@ -901,6 +915,8 @@ class BasicSpaSpeMamba(nn.Module):
         self.spectral_tokenizer = ContinuousBandGroupTokenizer(
             in_chans=in_chans, num_tokens=hidden_dim
         )
+        if spa_center_readout:
+            self.center_pool_beta = nn.Parameter(torch.zeros(()))
 
         drop_paths = torch.linspace(0, drop_path_rate, depths[0]).tolist()
         mamba_kwargs = dict(
@@ -920,6 +936,11 @@ class BasicSpaSpeMamba(nn.Module):
                     drop_path=drop_paths[index],
                     mlp_ratio=mlp_ratio,
                     mlp_drop_rate=mlp_drop_rate,
+                    spa_scan=spa_scan,
+                    spa_boundary_injection=spa_boundary_injection,
+                    spa_context_params=spa_context_params,
+                    spa_state_fusion=spa_state_fusion,
+                    spa_state_compress_dim=spa_state_compress_dim,
                     **mamba_kwargs,
                 )
                 for index in range(depths[0])
@@ -949,7 +970,10 @@ class BasicSpaSpeMamba(nn.Module):
         x = self.group_emb(rearrange(x, "b c h w -> b h w c"))
         for block in self.blocks:
             x = block(x, spectral_tokens)
-        return self.norm(x).mean(dim=(1, 2))
+        x = self.norm(x)
+        if hasattr(self, "center_pool_beta"):
+            return center_mean_pool(x, self.center_pool_beta)
+        return x.mean(dim=(1, 2))
 
     def forward(self, x):
         return self.head(self.forward_features(x))
