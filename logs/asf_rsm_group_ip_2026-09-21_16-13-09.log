@@ -1,0 +1,215 @@
+model_config:
+%s
+{
+    "model": {
+        "n_groups": [
+            4
+        ],
+        "patch_size": 7,
+        "in_chans": 200,
+        "num_classes": 16,
+        "depths": [
+            1
+        ],
+        "dims": [
+            64
+        ],
+        "split_ratio": 0,
+        "forward_type": "v3noz",
+        "spe_branch": 1,
+        "mlp_ratio": 0,
+        "ssm_conv": 0,
+        "post_norm": 0
+    },
+    "schedule": {
+        "optimizer": {
+            "name": "AdamW",
+            "params": {
+                "lr": 0.001
+            }
+        },
+        "lr_decay": {
+            "name": "StepLR",
+            "params": {
+                "step_size": 30,
+                "gamma": 0.9
+            }
+        }
+    }
+}
+experiments will run on GPU device 0
+model = asf_rsm_group
+dataset = ip
+dataset folder = ./datasets
+patch size = 7
+batch size = 64
+total epoch = 300
+0.05 for training and 0.95 testing
+running an experiment with the asf_rsm_group model
+run 1 / 5
+: 72944 parameters
+encoder_layers: 42784 parameters
+encoder_layers.0: 42784 parameters
+encoder_layers.0.0: 42784 parameters
+encoder_layers.0.0.dynamic_pos: 640 parameters
+encoder_layers.0.0.norm: 128 parameters
+encoder_layers.0.0.op: 24064 parameters
+encoder_layers.0.0.op.out_norm: 256 parameters
+encoder_layers.0.0.op.in_proj: 8192 parameters
+encoder_layers.0.0.op.act: 0 parameters
+encoder_layers.0.0.op.out_proj: 8192 parameters
+encoder_layers.0.0.op.dropout: 0 parameters
+encoder_layers.0.0.norm_spe: 128 parameters
+encoder_layers.0.0.op_spe: 216 parameters
+encoder_layers.0.0.op_spe.out_norm: 4 parameters
+encoder_layers.0.0.op_spe.in_proj: 2 parameters
+encoder_layers.0.0.op_spe.act: 0 parameters
+encoder_layers.0.0.op_spe.out_proj: 2 parameters
+encoder_layers.0.0.op_spe.dropout: 0 parameters
+encoder_layers.0.0.softmax_spe: 0 parameters
+encoder_layers.0.0.softmax_spa: 0 parameters
+encoder_layers.0.0.spa_gp: 0 parameters
+encoder_layers.0.0.conv_branch: 13253 parameters
+encoder_layers.0.0.conv_branch.conv1: 4224 parameters
+encoder_layers.0.0.conv_branch.conv1.0: 4096 parameters
+encoder_layers.0.0.conv_branch.conv1.1: 128 parameters
+encoder_layers.0.0.conv_branch.conv1.2: 0 parameters
+encoder_layers.0.0.conv_branch.conv2: 704 parameters
+encoder_layers.0.0.conv_branch.conv2.0: 576 parameters
+encoder_layers.0.0.conv_branch.conv2.1: 128 parameters
+encoder_layers.0.0.conv_branch.conv2.2: 0 parameters
+encoder_layers.0.0.conv_branch.conv3: 8320 parameters
+encoder_layers.0.0.conv_branch.conv3.0: 8192 parameters
+encoder_layers.0.0.conv_branch.conv3.1: 128 parameters
+encoder_layers.0.0.conv_branch.conv3.2: 0 parameters
+encoder_layers.0.0.conv_branch.conv_spe: 5 parameters
+encoder_layers.0.0.conv_branch.conv_spe.0: 3 parameters
+encoder_layers.0.0.conv_branch.conv_spe.1: 2 parameters
+encoder_layers.0.0.conv_branch.conv_spe.2: 0 parameters
+encoder_layers.0.0.fuse: 4355 parameters
+encoder_layers.0.0.fuse.pool: 0 parameters
+encoder_layers.0.0.fuse.fc1: 4288 parameters
+encoder_layers.0.0.fuse.fc1.0: 4160 parameters
+encoder_layers.0.0.fuse.fc1.1: 128 parameters
+encoder_layers.0.0.fuse.fc1.2: 0 parameters
+encoder_layers.0.0.fuse.fc2: 67 parameters
+encoder_layers.0.0.fuse.fc2.0: 65 parameters
+encoder_layers.0.0.fuse.fc2.1: 2 parameters
+encoder_layers.0.0.fuse.sigmoid: 0 parameters
+encoder_layers.0.0.drop_path: 0 parameters
+pad: 0 parameters
+group_emb: 28992 parameters
+group_emb.proj: 28864 parameters
+group_emb.batch_norm: 128 parameters
+group_emb.relu: 0 parameters
+classifier: 1168 parameters
+classifier.norm: 128 parameters
+classifier.permute: 0 parameters
+classifier.avgpool: 0 parameters
+classifier.flatten: 0 parameters
+classifier.head: 1040 parameters
+input params:
+u.1
+delta.1
+A.1
+B.1
+C.1
+D.1
+delta_bias.1
+input params:
+u
+delta
+A
+B
+C
+D
+delta_bias
+Unsupported operator aten::pad encountered 1 time(s)
+Unsupported operator aten::clone encountered 2 time(s)
+Unsupported operator aten::add encountered 6 time(s)
+Unsupported operator prim::PythonOp.CrossScan_2x_spe encountered 1 time(s)
+Unsupported operator prim::PythonOp.CrossMerge_2x_spe encountered 1 time(s)
+Unsupported operator aten::softmax encountered 2 time(s)
+Unsupported operator aten::mul encountered 5 time(s)
+Unsupported operator prim::PythonOp.CrossScan_Ab_1direction encountered 1 time(s)
+Unsupported operator prim::PythonOp.CrossMerge_Ab_1direction encountered 1 time(s)
+Unsupported operator aten::add_ encountered 1 time(s)
+Unsupported operator aten::silu_ encountered 4 time(s)
+Unsupported operator aten::sigmoid encountered 1 time(s)
+Unsupported operator aten::rsub encountered 1 time(s)
+The following submodules of the model were never called during the trace of the graph. They may be unused, or they were accessed by direct calls to .forward() or via other python methods. In the latter case they will have zeros for statistics, though their statistics will still contribute to their parent calling module.
+encoder_layers.0.0.drop_path
+params 72944 GFLOPs 0.004198158
+train at epoch 1/300, loss=2.501981
+epoch = 1: best acc = 0.3894
+epoch = 2: best acc = 0.4104
+epoch = 3: best acc = 0.4357
+epoch = 4: best acc = 0.4566
+epoch = 5: best acc = 0.4840
+epoch = 6: best acc = 0.5071
+epoch = 7: best acc = 0.5396
+epoch = 8: best acc = 0.5558
+epoch = 9: best acc = 0.6135
+train at epoch 10/300, loss=1.137812
+epoch = 10: best acc = 0.6373
+epoch = 11: best acc = 0.7130
+"ctrl+c" is pused, the training is over
+Confusion matrix :
+[[   0    1    0    0    0    0    0   43    0    0    0    0    0    0
+     0    0]
+ [   0 1090    2    0    0    0    0    0    0   57  207    1    0    0
+     0    0]
+ [   0   29  503    0    0    0    0    0    0    0  249    6    0    2
+     0    0]
+ [   0  113   42   38    0    1    0    0    0    0    1   30    0    0
+     0    0]
+ [   0    3    6    0    2   85    0   26    0    0    8    9    0  319
+     1    0]
+ [   0    1    0    0    0  688    0    0    0    0    2    0    0    2
+     0    0]
+ [   0    0    0    0    0    1    0   23    0    0    0    0    0    3
+     0    0]
+ [   0    0    0    0    0    0    0  453    0    0    0    0    0    1
+     0    0]
+ [   0    0    9    0    0    9    0    0    0    0    0    0    0    1
+     0    0]
+ [   0  124    1    0    0    1    0    0    0  523  272    0    0    2
+     0    0]
+ [   0  262   18    0    0    1    0    0    0    2 2045    0    0    4
+     0    0]
+ [   0  142  150    0    0    0    0    0    0   27  173   69    0    2
+     0    0]
+ [   0    0    6    0    0    0    0    0    0    0    1    4  183    1
+     0    0]
+ [   0    0    0    0    0    0    0    0    0    0    0    0    0 1202
+     0    0]
+ [   0    2    0    0    0   91    0    0    0    0    0    1   46  157
+    70    0]
+ [   0    0    0    0    0    0    0    0    0    9    0    3    0    0
+     0   76]]---
+Accuracy : 71.30%
+---
+class acc :
+	Alfalfa: 0.00
+	Corn-notill: 80.32
+	Corn-mintill: 63.75
+	Corn: 16.89
+	Grass-pasture: 0.44
+	Grass-trees: 99.28
+	Grass-pasture-mowed: 0.00
+	Hay-windrowed: 99.78
+	Oats: 0.00
+	Soybean-notill: 56.66
+	Soybean-mintill: 87.69
+	Soybean-clean: 12.26
+	Wheat: 93.85
+	Woods: 100.00
+	Buildings-Grass-Trees-Drives: 19.07
+	Stone-Steel-Towers: 86.36
+---
+[  0.          80.32424466  63.75158428  16.88888889   0.43572985
+  99.27849928   0.          99.77973568   0.          56.66305525
+  87.69296741  12.25577265  93.84615385 100.          19.07356948
+  86.36363636]---
+AA: 51.02%
+Kappa: 66.53

@@ -1,0 +1,777 @@
+model_config:
+%s
+{
+    "model": {
+        "n_groups": [
+            4
+        ],
+        "patch_size": 7,
+        "in_chans": 200,
+        "num_classes": 16,
+        "dims": [
+            64
+        ],
+        "depths": [
+            1
+        ],
+        "ssm_d_state": 16,
+        "ssm_ratio": 2,
+        "ssm_dt_rank": "auto",
+        "ssm_conv": 3,
+        "ssm_conv_bias": true,
+        "ssm_drop_rate": 0,
+        "use_gate": false,
+        "mlp_ratio": 4,
+        "mlp_drop_rate": 0,
+        "drop_path_rate": 0.1
+    },
+    "schedule": {
+        "optimizer": {
+            "name": "AdamW",
+            "params": {
+                "lr": 0.001
+            }
+        },
+        "lr_decay": {
+            "name": "StepLR",
+            "params": {
+                "step_size": 30,
+                "gamma": 0.9
+            }
+        }
+    }
+}
+experiments will run on GPU device 0
+model = basic_spa_spe_mamba
+dataset = ip
+dataset folder = ./datasets
+patch size = 7
+batch size = 64
+total epoch = 300
+0.1 for training and 0.9 testing
+running an experiment with the basic_spa_spe_mamba model
+run 1 / 5
+: 419476 parameters
+pad: 0 parameters
+group_emb: 28992 parameters
+group_emb.proj: 28864 parameters
+group_emb.batch_norm: 128 parameters
+group_emb.relu: 0 parameters
+spectral_tokenizer: 200 parameters
+blocks: 389116 parameters
+blocks.0: 389116 parameters
+blocks.0.spatial: 25344 parameters
+blocks.0.spatial.dynamic_pos: 640 parameters
+blocks.0.spatial.norm: 128 parameters
+blocks.0.spatial.mamba: 24576 parameters
+blocks.0.spatial.mamba.in_proj: 8192 parameters
+blocks.0.spatial.mamba.act: 0 parameters
+blocks.0.spatial.mamba.conv1d: 512 parameters
+blocks.0.spatial.mamba.out_norm: 256 parameters
+blocks.0.spatial.mamba.out_proj: 8192 parameters
+blocks.0.spatial.mamba.dropout: 0 parameters
+blocks.0.spectral: 330556 parameters
+blocks.0.spectral.norm: 98 parameters
+blocks.0.spectral.mamba: 21560 parameters
+blocks.0.spectral.mamba.in_proj: 4802 parameters
+blocks.0.spectral.mamba.act: 0 parameters
+blocks.0.spectral.mamba.conv1d: 392 parameters
+blocks.0.spectral.mamba.out_norm: 196 parameters
+blocks.0.spectral.mamba.out_proj: 4802 parameters
+blocks.0.spectral.mamba.dropout: 0 parameters
+blocks.0.spectral.state_fusion: 308896 parameters
+blocks.0.spectral.state_fusion.group_fusion: 308896 parameters
+blocks.0.drop_path: 0 parameters
+blocks.0.norm_ffn: 128 parameters
+blocks.0.ffn: 33088 parameters
+blocks.0.ffn.fc1: 16640 parameters
+blocks.0.ffn.act: 0 parameters
+blocks.0.ffn.fc2: 16448 parameters
+blocks.0.ffn.drop: 0 parameters
+norm: 128 parameters
+head: 1040 parameters
+params 419476 GFLOPs not reported for basic_spa_spe_mamba
+train at epoch 1/300, loss=2.277744
+epoch = 1: best acc = 0.3239
+epoch = 2: best acc = 0.4334
+epoch = 3: best acc = 0.5025
+epoch = 4: best acc = 0.5346
+epoch = 5: best acc = 0.5996
+epoch = 7: best acc = 0.6399
+epoch = 8: best acc = 0.6962
+epoch = 9: best acc = 0.6963
+train at epoch 10/300, loss=0.774166
+epoch = 12: best acc = 0.7620
+epoch = 16: best acc = 0.8526
+epoch = 19: best acc = 0.8869
+train at epoch 20/300, loss=0.357552
+train at epoch 30/300, loss=0.240710
+epoch = 31: best acc = 0.9267
+epoch = 35: best acc = 0.9497
+epoch = 37: best acc = 0.9508
+epoch = 38: best acc = 0.9528
+train at epoch 40/300, loss=0.204635
+train at epoch 50/300, loss=0.122868
+epoch = 52: best acc = 0.9564
+train at epoch 60/300, loss=0.045174
+epoch = 62: best acc = 0.9670
+train at epoch 70/300, loss=0.034014
+epoch = 70: best acc = 0.9685
+epoch = 77: best acc = 0.9763
+train at epoch 80/300, loss=0.019432
+train at epoch 90/300, loss=0.041147
+train at epoch 100/300, loss=0.012449
+epoch = 102: best acc = 0.9793
+train at epoch 110/300, loss=0.016582
+epoch = 119: best acc = 0.9796
+train at epoch 120/300, loss=0.005010
+train at epoch 130/300, loss=0.052240
+train at epoch 140/300, loss=0.008277
+train at epoch 150/300, loss=0.005442
+train at epoch 160/300, loss=0.014700
+train at epoch 170/300, loss=0.006056
+train at epoch 180/300, loss=0.010101
+train at epoch 190/300, loss=0.010896
+train at epoch 200/300, loss=0.002195
+train at epoch 210/300, loss=0.001178
+train at epoch 220/300, loss=0.007195
+train at epoch 230/300, loss=0.001712
+train at epoch 240/300, loss=0.001360
+train at epoch 250/300, loss=0.000728
+train at epoch 260/300, loss=0.000900
+train at epoch 270/300, loss=0.000501
+train at epoch 280/300, loss=0.000569
+train at epoch 290/300, loss=0.000434
+train at epoch 300/300, loss=0.009873
+Confusion matrix :
+[[  39    0    0    0    1    0    0    1    0    0    0    0    0    0
+     0    0]
+ [   0 1234    0    4    0    0    0    0    0   11   36    0    0    0
+     0    0]
+ [   0    3  715    2    0    2    0    0    0    0   11   13    1    0
+     0    0]
+ [   0    0    1  209    0    0    0    0    0    0    0    3    0    0
+     0    0]
+ [   0    0    0    0  431    0    0    0    0    0    0    4    0    0
+     0    0]
+ [   0    0    0    0    2  653    0    0    0    0    0    0    0    0
+     2    0]
+ [   0    0    0    0    1    0   20    4    0    0    0    0    0    0
+     0    0]
+ [   0    0    0    0    0    0    0  430    0    0    0    0    0    0
+     0    0]
+ [   0    0    0    0    2    0    0    0   16    0    0    0    0    0
+     0    0]
+ [   0    9    0    0    0    0    0    0    0  850   12    0    0    2
+     2    0]
+ [   0    3    0    0    0    1    0    0    0   12 2192    0    0    0
+     2    0]
+ [   0    1    1    1    0    0    0    0    0    0    0  523    0    0
+     0    8]
+ [   0    0    1    0    0    0    0    0    0    0    0    0  184    0
+     0    0]
+ [   0    0    0    0    0    0    0    0    1    0    0    0    1 1121
+    16    0]
+ [   0    0    0    0    0    4    0    0    0    0    0    0    0    7
+   336    0]
+ [   0    0    0    0    0    0    0    0    0    0    0    0    0    0
+     0   84]]---
+Accuracy : 97.96%
+---
+class acc :
+	Alfalfa: 95.12
+	Corn-notill: 96.03
+	Corn-mintill: 95.72
+	Corn: 98.12
+	Grass-pasture: 99.08
+	Grass-trees: 99.39
+	Grass-pasture-mowed: 80.00
+	Hay-windrowed: 100.00
+	Oats: 88.89
+	Soybean-notill: 97.14
+	Soybean-mintill: 99.19
+	Soybean-clean: 97.94
+	Wheat: 99.46
+	Woods: 98.42
+	Buildings-Grass-Trees-Drives: 96.83
+	Stone-Steel-Towers: 100.00
+---
+[ 95.12195122  96.0311284   95.71619813  98.12206573  99.08045977
+  99.39117199  80.         100.          88.88888889  97.14285714
+  99.18552036  97.94007491  99.45945946  98.41966637  96.82997118
+ 100.        ]---
+AA: 96.33%
+Kappa: 97.68
+------Get classification maps successful-------
+running an experiment with the basic_spa_spe_mamba model
+run 2 / 5
+train at epoch 1/300, loss=2.302818
+epoch = 1: best acc = 0.2396
+epoch = 2: best acc = 0.3513
+epoch = 3: best acc = 0.5145
+epoch = 4: best acc = 0.5355
+epoch = 5: best acc = 0.5767
+epoch = 6: best acc = 0.5834
+epoch = 7: best acc = 0.6506
+epoch = 9: best acc = 0.7350
+train at epoch 10/300, loss=0.799636
+epoch = 10: best acc = 0.7722
+epoch = 13: best acc = 0.7951
+epoch = 14: best acc = 0.8082
+epoch = 15: best acc = 0.8175
+train at epoch 20/300, loss=0.336028
+epoch = 20: best acc = 0.8424
+epoch = 21: best acc = 0.8437
+epoch = 22: best acc = 0.9040
+epoch = 27: best acc = 0.9255
+epoch = 29: best acc = 0.9397
+train at epoch 30/300, loss=0.152870
+epoch = 30: best acc = 0.9446
+train at epoch 40/300, loss=0.116116
+epoch = 46: best acc = 0.9571
+train at epoch 50/300, loss=0.068393
+epoch = 52: best acc = 0.9688
+train at epoch 60/300, loss=0.045011
+train at epoch 70/300, loss=0.018431
+epoch = 76: best acc = 0.9712
+train at epoch 80/300, loss=0.019437
+train at epoch 90/300, loss=0.031183
+train at epoch 100/300, loss=0.029427
+train at epoch 110/300, loss=0.027930
+train at epoch 120/300, loss=0.007497
+train at epoch 130/300, loss=0.009358
+epoch = 132: best acc = 0.9750
+epoch = 136: best acc = 0.9760
+epoch = 137: best acc = 0.9760
+train at epoch 140/300, loss=0.008262
+train at epoch 150/300, loss=0.022243
+train at epoch 160/300, loss=0.009405
+train at epoch 170/300, loss=0.026815
+train at epoch 180/300, loss=0.003467
+train at epoch 190/300, loss=0.001174
+train at epoch 200/300, loss=0.024404
+train at epoch 210/300, loss=0.002484
+train at epoch 220/300, loss=0.001673
+train at epoch 230/300, loss=0.002202
+train at epoch 240/300, loss=0.000734
+train at epoch 250/300, loss=0.000452
+train at epoch 260/300, loss=0.006889
+train at epoch 270/300, loss=0.003963
+train at epoch 280/300, loss=0.001485
+train at epoch 290/300, loss=0.001268
+train at epoch 300/300, loss=0.012648
+Confusion matrix :
+[[  40    1    0    0    0    0    0    0    0    0    0    0    0    0
+     0    0]
+ [   0 1258    3    0    0    0    0    0    0    1   23    0    0    0
+     0    0]
+ [   0    5  729    6    0    0    0    0    0    0    5    2    0    0
+     0    0]
+ [   0    2    1  208    0    0    0    0    0    0    0    2    0    0
+     0    0]
+ [   0    0    0    2  420    2    0    0    1    1    0    0    0    9
+     0    0]
+ [   0    0    0    0    0  656    0    0    0    0    1    0    0    0
+     0    0]
+ [   0    0    0    0    0    0   25    0    0    0    0    0    0    0
+     0    0]
+ [   0    0    0    0    0    0    0  430    0    0    0    0    0    0
+     0    0]
+ [   0    0    0    0    4    0    0    0   14    0    0    0    0    0
+     0    0]
+ [   0   10    0    0    0    0    0    0    0  807   52    3    0    2
+     1    0]
+ [   0    7    3    0    0    2    0    0    0    4 2188    6    0    0
+     0    0]
+ [   0    0    0    0    0    0    0    0    0    0    3  531    0    0
+     0    0]
+ [   0    0    0    0    1    0    0    0    0    0    0    0  184    0
+     0    0]
+ [   0    0    0    0    0    0    0    0    0    0    0    0    0 1098
+    41    0]
+ [   0    0    0    0    0    0    0    0    0    0    1    0    0   12
+   334    0]
+ [   0    0    0    0    0    0    0    0    0    0    0    2    0    0
+     0   82]]---
+Accuracy : 97.60%
+---
+class acc :
+	Alfalfa: 97.56
+	Corn-notill: 97.90
+	Corn-mintill: 97.59
+	Corn: 97.65
+	Grass-pasture: 96.55
+	Grass-trees: 99.85
+	Grass-pasture-mowed: 100.00
+	Hay-windrowed: 100.00
+	Oats: 77.78
+	Soybean-notill: 92.23
+	Soybean-mintill: 99.00
+	Soybean-clean: 99.44
+	Wheat: 99.46
+	Woods: 96.40
+	Buildings-Grass-Trees-Drives: 96.25
+	Stone-Steel-Towers: 97.62
+---
+[ 97.56097561  97.89883268  97.59036145  97.65258216  96.55172414
+  99.847793   100.         100.          77.77777778  92.22857143
+  99.00452489  99.43820225  99.45945946  96.40035119  96.25360231
+  97.61904762]---
+AA: 96.58%
+Kappa: 97.27
+running an experiment with the basic_spa_spe_mamba model
+run 3 / 5
+train at epoch 1/300, loss=2.291831
+epoch = 1: best acc = 0.2396
+epoch = 2: best acc = 0.4171
+epoch = 3: best acc = 0.5037
+epoch = 4: best acc = 0.5272
+epoch = 5: best acc = 0.5907
+epoch = 6: best acc = 0.6167
+epoch = 7: best acc = 0.6229
+epoch = 8: best acc = 0.7566
+train at epoch 10/300, loss=0.742369
+epoch = 10: best acc = 0.7679
+epoch = 12: best acc = 0.8107
+epoch = 14: best acc = 0.8302
+epoch = 17: best acc = 0.8456
+train at epoch 20/300, loss=0.341086
+epoch = 24: best acc = 0.8490
+epoch = 25: best acc = 0.9160
+train at epoch 30/300, loss=0.166679
+epoch = 30: best acc = 0.9170
+epoch = 34: best acc = 0.9235
+epoch = 37: best acc = 0.9278
+train at epoch 40/300, loss=0.130275
+epoch = 46: best acc = 0.9368
+train at epoch 50/300, loss=0.054854
+epoch = 53: best acc = 0.9497
+train at epoch 60/300, loss=0.045850
+epoch = 63: best acc = 0.9521
+epoch = 64: best acc = 0.9537
+epoch = 66: best acc = 0.9639
+train at epoch 70/300, loss=0.034195
+train at epoch 80/300, loss=0.044412
+train at epoch 90/300, loss=0.032243
+epoch = 93: best acc = 0.9643
+epoch = 94: best acc = 0.9648
+train at epoch 100/300, loss=0.009060
+epoch = 107: best acc = 0.9692
+train at epoch 110/300, loss=0.010943
+epoch = 111: best acc = 0.9712
+train at epoch 120/300, loss=0.036584
+train at epoch 130/300, loss=0.003014
+train at epoch 140/300, loss=0.002256
+train at epoch 150/300, loss=0.006071
+train at epoch 160/300, loss=0.002685
+epoch = 161: best acc = 0.9730
+train at epoch 170/300, loss=0.002356
+train at epoch 180/300, loss=0.001992
+train at epoch 190/300, loss=0.002738
+epoch = 192: best acc = 0.9739
+train at epoch 200/300, loss=0.020479
+train at epoch 210/300, loss=0.007175
+train at epoch 220/300, loss=0.002804
+train at epoch 230/300, loss=0.003764
+train at epoch 240/300, loss=0.003509
+train at epoch 250/300, loss=0.001192
+train at epoch 260/300, loss=0.005597
+train at epoch 270/300, loss=0.002203
+train at epoch 280/300, loss=0.001402
+train at epoch 290/300, loss=0.000593
+train at epoch 300/300, loss=0.000721
+Confusion matrix :
+[[  38    0    0    0    1    0    0    2    0    0    0    0    0    0
+     0    0]
+ [   0 1253    1    0    0    0    0    0    0   16   15    0    0    0
+     0    0]
+ [   0    7  730    2    0    0    0    0    0    0    4    4    0    0
+     0    0]
+ [   0    0    0  211    0    0    0    0    0    0    0    1    0    0
+     1    0]
+ [   0    1    0    0  412    0    2    0    0    3    0    2    0   15
+     0    0]
+ [   0    0    0    0    0  656    0    0    0    0    0    0    0    1
+     0    0]
+ [   0    0    0    0    0    0   24    0    0    0    1    0    0    0
+     0    0]
+ [   1    0    0    0    0    0    0  429    0    0    0    0    0    0
+     0    0]
+ [   0    0    9    0    1    0    0    0    8    0    0    0    0    0
+     0    0]
+ [   0    9    0    0    1    0    0    0    0  836   26    3    0    0
+     0    0]
+ [   0   16    7    0    0    0    1    0    0   23 2155    7    0    0
+     1    0]
+ [   0    0    0    0    0    0    0    0    0    0    1  530    0    0
+     0    3]
+ [   0    0    0    0    0    0    0    0    0    0    0    0  185    0
+     0    0]
+ [   0    0    0    0    6    0    0    0    0    0    0    0    0 1120
+    13    0]
+ [   0    0    0    0    0    0    0    0    0    0    0    0    0   34
+   313    0]
+ [   0    0    0    0    0    0    0    0    0    0    0    0    0    0
+     0   84]]---
+Accuracy : 97.39%
+---
+class acc :
+	Alfalfa: 92.68
+	Corn-notill: 97.51
+	Corn-mintill: 97.72
+	Corn: 99.06
+	Grass-pasture: 94.71
+	Grass-trees: 99.85
+	Grass-pasture-mowed: 96.00
+	Hay-windrowed: 99.77
+	Oats: 44.44
+	Soybean-notill: 95.54
+	Soybean-mintill: 97.51
+	Soybean-clean: 99.25
+	Wheat: 100.00
+	Woods: 98.33
+	Buildings-Grass-Trees-Drives: 90.20
+	Stone-Steel-Towers: 100.00
+---
+[ 92.68292683  97.50972763  97.72423025  99.06103286  94.71264368
+  99.847793    96.          99.76744186  44.44444444  95.54285714
+  97.51131222  99.25093633 100.          98.33187006  90.20172911
+ 100.        ]---
+AA: 93.91%
+Kappa: 97.02
+running an experiment with the basic_spa_spe_mamba model
+run 4 / 5
+train at epoch 1/300, loss=2.339569
+epoch = 1: best acc = 0.3187
+epoch = 2: best acc = 0.4274
+epoch = 3: best acc = 0.5225
+epoch = 4: best acc = 0.5376
+epoch = 6: best acc = 0.6114
+epoch = 7: best acc = 0.6361
+epoch = 8: best acc = 0.7163
+train at epoch 10/300, loss=0.765844
+epoch = 10: best acc = 0.7322
+epoch = 11: best acc = 0.7688
+epoch = 12: best acc = 0.8085
+epoch = 19: best acc = 0.8494
+train at epoch 20/300, loss=0.391294
+epoch = 26: best acc = 0.8710
+epoch = 28: best acc = 0.9045
+train at epoch 30/300, loss=0.235094
+epoch = 34: best acc = 0.9233
+epoch = 37: best acc = 0.9291
+train at epoch 40/300, loss=0.108077
+epoch = 40: best acc = 0.9320
+epoch = 45: best acc = 0.9338
+epoch = 46: best acc = 0.9480
+train at epoch 50/300, loss=0.076335
+epoch = 57: best acc = 0.9576
+train at epoch 60/300, loss=0.066333
+train at epoch 70/300, loss=0.064905
+train at epoch 80/300, loss=0.049320
+train at epoch 90/300, loss=0.041132
+epoch = 97: best acc = 0.9614
+train at epoch 100/300, loss=0.031750
+epoch = 102: best acc = 0.9615
+train at epoch 110/300, loss=0.024380
+train at epoch 120/300, loss=0.016999
+train at epoch 130/300, loss=0.019565
+epoch = 137: best acc = 0.9647
+train at epoch 140/300, loss=0.004817
+epoch = 141: best acc = 0.9670
+train at epoch 150/300, loss=0.007629
+train at epoch 160/300, loss=0.004600
+train at epoch 170/300, loss=0.008677
+train at epoch 180/300, loss=0.016137
+train at epoch 190/300, loss=0.006294
+train at epoch 200/300, loss=0.005225
+train at epoch 210/300, loss=0.020747
+train at epoch 220/300, loss=0.002372
+train at epoch 230/300, loss=0.003610
+train at epoch 240/300, loss=0.003348
+train at epoch 250/300, loss=0.002825
+train at epoch 260/300, loss=0.014312
+train at epoch 270/300, loss=0.001458
+train at epoch 280/300, loss=0.001429
+train at epoch 290/300, loss=0.003221
+train at epoch 300/300, loss=0.004703
+Confusion matrix :
+[[  38    1    0    0    0    0    1    0    0    0    0    0    0    0
+     0    1]
+ [   0 1249    4    0    0    0    0    0    0   14   17    0    0    1
+     0    0]
+ [   0    1  737    2    0    0    0    0    0    0    7    0    0    0
+     0    0]
+ [   0    0   14  198    0    0    0    0    0    0    0    0    0    0
+     1    0]
+ [   1    0    3    3  415    0    0    0    0    0    0   10    0    3
+     0    0]
+ [   0    0    0    0    3  653    0    0    0    0    1    0    0    0
+     0    0]
+ [   0    0    0    0    0    0   25    0    0    0    0    0    0    0
+     0    0]
+ [   0    0    0    0    0    0    0  430    0    0    0    0    0    0
+     0    0]
+ [   0    0    0    0    1    0    0    0   17    0    0    0    0    0
+     0    0]
+ [   0   26    0    0    2    0    0    0    0  786   51    5    0    5
+     0    0]
+ [   0   13    0    0    1    0    0    0    0    9 2179    7    0    0
+     1    0]
+ [   0    2    0    0    0    0    0    0    0    0   11  516    0    0
+     0    5]
+ [   0    0    2    0    0    0    0    0    0    0    0    0  183    0
+     0    0]
+ [   0    0    0    0    0    0    0    0    0    0    0    0    0 1122
+    17    0]
+ [   0    3    0    0    0    7    0    0    1    0    4    0    0   43
+   289    0]
+ [   0    0    0    0    0    0    0    0    0    0    0    0    0    0
+     0   84]]---
+Accuracy : 96.70%
+---
+class acc :
+	Alfalfa: 92.68
+	Corn-notill: 97.20
+	Corn-mintill: 98.66
+	Corn: 92.96
+	Grass-pasture: 95.40
+	Grass-trees: 99.39
+	Grass-pasture-mowed: 100.00
+	Hay-windrowed: 100.00
+	Oats: 94.44
+	Soybean-notill: 89.83
+	Soybean-mintill: 98.60
+	Soybean-clean: 96.63
+	Wheat: 98.92
+	Woods: 98.51
+	Buildings-Grass-Trees-Drives: 83.29
+	Stone-Steel-Towers: 100.00
+---
+[ 92.68292683  97.19844358  98.66131191  92.95774648  95.40229885
+  99.39117199 100.         100.          94.44444444  89.82857143
+  98.59728507  96.62921348  98.91891892  98.50746269  83.28530259
+ 100.        ]---
+AA: 96.03%
+Kappa: 96.24
+running an experiment with the basic_spa_spe_mamba model
+run 5 / 5
+train at epoch 1/300, loss=2.309715
+epoch = 1: best acc = 0.2396
+epoch = 2: best acc = 0.3573
+epoch = 3: best acc = 0.5165
+epoch = 4: best acc = 0.5195
+epoch = 5: best acc = 0.5861
+epoch = 6: best acc = 0.6230
+epoch = 7: best acc = 0.6614
+epoch = 8: best acc = 0.6649
+epoch = 9: best acc = 0.7266
+train at epoch 10/300, loss=0.769505
+epoch = 10: best acc = 0.7402
+epoch = 11: best acc = 0.7786
+epoch = 14: best acc = 0.7948
+epoch = 15: best acc = 0.7990
+epoch = 19: best acc = 0.8628
+train at epoch 20/300, loss=0.342729
+epoch = 27: best acc = 0.8741
+epoch = 29: best acc = 0.8920
+train at epoch 30/300, loss=0.280044
+epoch = 35: best acc = 0.9110
+epoch = 36: best acc = 0.9127
+epoch = 37: best acc = 0.9294
+epoch = 39: best acc = 0.9399
+train at epoch 40/300, loss=0.112999
+epoch = 40: best acc = 0.9405
+epoch = 41: best acc = 0.9502
+epoch = 42: best acc = 0.9510
+train at epoch 50/300, loss=0.096098
+epoch = 51: best acc = 0.9548
+epoch = 54: best acc = 0.9634
+train at epoch 60/300, loss=0.041645
+epoch = 62: best acc = 0.9659
+train at epoch 70/300, loss=0.047949
+train at epoch 80/300, loss=0.027812
+train at epoch 90/300, loss=0.021048
+epoch = 97: best acc = 0.9664
+train at epoch 100/300, loss=0.031701
+epoch = 104: best acc = 0.9667
+epoch = 109: best acc = 0.9725
+train at epoch 110/300, loss=0.010970
+train at epoch 120/300, loss=0.010820
+epoch = 122: best acc = 0.9726
+epoch = 129: best acc = 0.9734
+train at epoch 130/300, loss=0.004768
+train at epoch 140/300, loss=0.006079
+epoch = 142: best acc = 0.9740
+train at epoch 150/300, loss=0.055473
+train at epoch 160/300, loss=0.005242
+train at epoch 170/300, loss=0.002965
+train at epoch 180/300, loss=0.005976
+train at epoch 190/300, loss=0.001937
+train at epoch 200/300, loss=0.004432
+train at epoch 210/300, loss=0.002455
+train at epoch 220/300, loss=0.001513
+epoch = 221: best acc = 0.9741
+epoch = 222: best acc = 0.9742
+epoch = 223: best acc = 0.9742
+epoch = 225: best acc = 0.9742
+epoch = 227: best acc = 0.9744
+train at epoch 230/300, loss=0.001108
+train at epoch 240/300, loss=0.000685
+epoch = 246: best acc = 0.9744
+train at epoch 250/300, loss=0.001046
+train at epoch 260/300, loss=0.001148
+epoch = 265: best acc = 0.9744
+epoch = 266: best acc = 0.9750
+train at epoch 270/300, loss=0.000721
+epoch = 271: best acc = 0.9753
+train at epoch 280/300, loss=0.004250
+train at epoch 290/300, loss=0.000980
+train at epoch 300/300, loss=0.005440
+Confusion matrix :
+[[  28    1    0    0    0    0    0   12    0    0    0    0    0    0
+     0    0]
+ [   0 1255    2    0    0    0    0    0    0   13    7    4    0    4
+     0    0]
+ [   0    0  721   21    0    0    0    0    1    0    0    4    0    0
+     0    0]
+ [   0    0    0  213    0    0    0    0    0    0    0    0    0    0
+     0    0]
+ [   0    0    0    0  424    1    0    0    0    2    1    1    0    5
+     1    0]
+ [   0    0    0    0    1  652    0    0    0    0    4    0    0    0
+     0    0]
+ [   0    0    0    0    0    0   25    0    0    0    0    0    0    0
+     0    0]
+ [   0    0    0    0    0    0    0  430    0    0    0    0    0    0
+     0    0]
+ [   0    0    1    0    1    0    0    0   16    0    0    0    0    0
+     0    0]
+ [   0    8    0    0    0    0    0    0    0  822   32   12    0    1
+     0    0]
+ [   0    8    1    0    0    0    0    0    0    1 2197    3    0    0
+     0    0]
+ [   0    0    1    0    0    0    0    0    0    0    1  522    0    0
+     7    3]
+ [   0    0    1    0    0    0    0    0    0    0    0    0  184    0
+     0    0]
+ [   0    0    0    0    0    0    0    0    0    0    0    0    0 1117
+    22    0]
+ [   0    0    0    0    1   14    0    0    0    0    0    0    1   23
+   308    0]
+ [   0    0    0    0    0    0    0    0    0    0    0    1    0    0
+     0   83]]---
+Accuracy : 97.53%
+---
+class acc :
+	Alfalfa: 68.29
+	Corn-notill: 97.67
+	Corn-mintill: 96.52
+	Corn: 100.00
+	Grass-pasture: 97.47
+	Grass-trees: 99.24
+	Grass-pasture-mowed: 100.00
+	Hay-windrowed: 100.00
+	Oats: 88.89
+	Soybean-notill: 93.94
+	Soybean-mintill: 99.41
+	Soybean-clean: 97.75
+	Wheat: 99.46
+	Woods: 98.07
+	Buildings-Grass-Trees-Drives: 88.76
+	Stone-Steel-Towers: 98.81
+---
+[ 68.29268293  97.66536965  96.51941098 100.          97.47126437
+  99.23896499 100.         100.          88.88888889  93.94285714
+  99.41176471  97.75280899  99.45945946  98.06848112  88.76080692
+  98.80952381]---
+AA: 95.27%
+Kappa: 97.18
+Agregated results :
+Confusion matrix :
+[[3.6600e+01 6.0000e-01 0.0000e+00 0.0000e+00 4.0000e-01 0.0000e+00
+  2.0000e-01 3.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00
+  0.0000e+00 0.0000e+00 0.0000e+00 2.0000e-01]
+ [0.0000e+00 1.2498e+03 2.0000e+00 8.0000e-01 0.0000e+00 0.0000e+00
+  0.0000e+00 0.0000e+00 0.0000e+00 1.1000e+01 1.9600e+01 8.0000e-01
+  0.0000e+00 1.0000e+00 0.0000e+00 0.0000e+00]
+ [0.0000e+00 3.2000e+00 7.2640e+02 6.6000e+00 0.0000e+00 4.0000e-01
+  0.0000e+00 0.0000e+00 2.0000e-01 0.0000e+00 5.4000e+00 4.6000e+00
+  2.0000e-01 0.0000e+00 0.0000e+00 0.0000e+00]
+ [0.0000e+00 4.0000e-01 3.2000e+00 2.0780e+02 0.0000e+00 0.0000e+00
+  0.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00 1.2000e+00
+  0.0000e+00 0.0000e+00 4.0000e-01 0.0000e+00]
+ [2.0000e-01 2.0000e-01 6.0000e-01 1.0000e+00 4.2040e+02 6.0000e-01
+  4.0000e-01 0.0000e+00 2.0000e-01 1.2000e+00 2.0000e-01 3.4000e+00
+  0.0000e+00 6.4000e+00 2.0000e-01 0.0000e+00]
+ [0.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00 1.2000e+00 6.5400e+02
+  0.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00 1.2000e+00 0.0000e+00
+  0.0000e+00 2.0000e-01 4.0000e-01 0.0000e+00]
+ [0.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00 2.0000e-01 0.0000e+00
+  2.3800e+01 8.0000e-01 0.0000e+00 0.0000e+00 2.0000e-01 0.0000e+00
+  0.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00]
+ [2.0000e-01 0.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00
+  0.0000e+00 4.2980e+02 0.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00
+  0.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00]
+ [0.0000e+00 0.0000e+00 2.0000e+00 0.0000e+00 1.8000e+00 0.0000e+00
+  0.0000e+00 0.0000e+00 1.4200e+01 0.0000e+00 0.0000e+00 0.0000e+00
+  0.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00]
+ [0.0000e+00 1.2400e+01 0.0000e+00 0.0000e+00 6.0000e-01 0.0000e+00
+  0.0000e+00 0.0000e+00 0.0000e+00 8.2020e+02 3.4600e+01 4.6000e+00
+  0.0000e+00 2.0000e+00 6.0000e-01 0.0000e+00]
+ [0.0000e+00 9.4000e+00 2.2000e+00 0.0000e+00 2.0000e-01 6.0000e-01
+  2.0000e-01 0.0000e+00 0.0000e+00 9.8000e+00 2.1822e+03 4.6000e+00
+  0.0000e+00 0.0000e+00 8.0000e-01 0.0000e+00]
+ [0.0000e+00 6.0000e-01 4.0000e-01 2.0000e-01 0.0000e+00 0.0000e+00
+  0.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00 3.2000e+00 5.2440e+02
+  0.0000e+00 0.0000e+00 1.4000e+00 3.8000e+00]
+ [0.0000e+00 0.0000e+00 8.0000e-01 0.0000e+00 2.0000e-01 0.0000e+00
+  0.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00
+  1.8400e+02 0.0000e+00 0.0000e+00 0.0000e+00]
+ [0.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00 1.2000e+00 0.0000e+00
+  0.0000e+00 0.0000e+00 2.0000e-01 0.0000e+00 0.0000e+00 0.0000e+00
+  2.0000e-01 1.1156e+03 2.1800e+01 0.0000e+00]
+ [0.0000e+00 6.0000e-01 0.0000e+00 0.0000e+00 2.0000e-01 5.0000e+00
+  0.0000e+00 0.0000e+00 2.0000e-01 0.0000e+00 1.0000e+00 0.0000e+00
+  2.0000e-01 2.3800e+01 3.1600e+02 0.0000e+00]
+ [0.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00
+  0.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00 0.0000e+00 6.0000e-01
+  0.0000e+00 0.0000e+00 0.0000e+00 8.3400e+01]]---
+Accuracy: 97.44 +- 0.41
+---
+class acc :
+	Alfalfa: 89.27 +- 10.64
+	Corn-notill: 97.26 +- 0.66
+	Corn-mintill: 97.24 +- 1.02
+	Corn: 97.56 +- 2.44
+	Grass-pasture: 96.64 +- 1.54
+	Grass-trees: 99.54 +- 0.25
+	Grass-pasture-mowed: 95.20 +- 7.76
+	Hay-windrowed: 99.95 +- 0.09
+	Oats: 78.89 +- 18.05
+	Soybean-notill: 93.74 +- 2.55
+	Soybean-mintill: 98.74 +- 0.67
+	Soybean-clean: 98.20 +- 1.04
+	Wheat: 99.46 +- 0.34
+	Woods: 97.95 +- 0.79
+	Buildings-Grass-Trees-Drives: 91.07 +- 5.03
+	Stone-Steel-Towers: 99.29 +- 0.95
+---
+[array([ 95.12195122,  96.0311284 ,  95.71619813,  98.12206573,
+        99.08045977,  99.39117199,  80.        , 100.        ,
+        88.88888889,  97.14285714,  99.18552036,  97.94007491,
+        99.45945946,  98.41966637,  96.82997118, 100.        ]), array([ 97.56097561,  97.89883268,  97.59036145,  97.65258216,
+        96.55172414,  99.847793  , 100.        , 100.        ,
+        77.77777778,  92.22857143,  99.00452489,  99.43820225,
+        99.45945946,  96.40035119,  96.25360231,  97.61904762]), array([ 92.68292683,  97.50972763,  97.72423025,  99.06103286,
+        94.71264368,  99.847793  ,  96.        ,  99.76744186,
+        44.44444444,  95.54285714,  97.51131222,  99.25093633,
+       100.        ,  98.33187006,  90.20172911, 100.        ]), array([ 92.68292683,  97.19844358,  98.66131191,  92.95774648,
+        95.40229885,  99.39117199, 100.        , 100.        ,
+        94.44444444,  89.82857143,  98.59728507,  96.62921348,
+        98.91891892,  98.50746269,  83.28530259, 100.        ]), array([ 68.29268293,  97.66536965,  96.51941098, 100.        ,
+        97.47126437,  99.23896499, 100.        , 100.        ,
+        88.88888889,  93.94285714,  99.41176471,  97.75280899,
+        99.45945946,  98.06848112,  88.76080692,  98.80952381])]---
+AA: 95.62 +- 0.96
+Kappa: 97.08 +- 0.47
