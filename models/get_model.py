@@ -22,7 +22,7 @@ from .lightweight_spectral_mamba import lightweight_spectral_mamba
 # from .basic_spa_spe_mamba_dualossm_bfs import basic_spa_spe_mamba
 # from .basic_spa_spe_mamba_dualossm_cas2f_bfs import basic_spa_spe_mamba
 # from .basic_spa_spe_mamba_sharedcenter_cas2f_bfs import basic_spa_spe_mamba
-from .basic_spa_spe_mamba_fullossm_sharedcenter_cas2f_bfs import basic_spa_spe_mamba
+from .DPE_Mamba_CFAM import basic_spa_spe_mamba
 
 
 from .cas2mm_only_rebuilt_v2 import asf_rsm_group

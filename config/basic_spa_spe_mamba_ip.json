@@ -16,6 +16,9 @@
         "mlp_ratio": 4,
         "mlp_drop_rate": 0,
         "drop_path_rate": 0.1,
+        "bfs_enabled": false,
+        "fusion_type": "center_cfam_residual",
+        "fusion_heads": 8,
         
         "spatial_forward_type": "v3noz",
         "spatial_ssm_conv": 0,

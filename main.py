@@ -58,11 +58,11 @@ if __name__ == "__main__":
     parser.add_argument("--epoch", type=int, default=300)    
     parser.add_argument("--bs", type=int, default=64)  # bs = batch size  
     parser.add_argument("--ratio", type=float, default=None,
-                        help="training ratio (default: 0.05 for IP, 0.1 for other datasets)")
+                        help="training ratio (default: 0.05 for IP/UP, 0.1 for other datasets)")
     parser.add_argument("--disjoint", type=bool, default=False)
     opts = parser.parse_args()
     if opts.ratio is None:
-        opts.ratio = 0.05 if opts.dataset_name == 'ip' else 0.1
+        opts.ratio = 0.05 if opts.dataset_name in ('ip', 'up') else 0.1
     config_dir = os.path.join('config', '%s_%s.json' % (opts.model, opts.dataset_name))
     if os.path.exists(config_dir):
         model_config = json.load(open(config_dir, 'r'))
@@ -104,7 +104,7 @@ if __name__ == "__main__":
     print("total epoch = {}".format(opts.epoch))
     print("{} for training and {} testing".format(opts.ratio, 1 - opts.ratio))
 
-    if opts.dataset_name == 'ip':
+    if opts.dataset_name in ('ip', 'up'):
         seeds = [1, 34, 20031025, 9, 10, 11, 424124, 21213, 123, 29]
     elif opts.dataset_name == 'whulk':
         seeds = [9, 10, 11, 424124, 21213, 231419123, 123, 1, 34, 20031025]

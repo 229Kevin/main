@@ -1,4 +1,9 @@
-"""Full-OSSM ablation for the shared-center CAS2F+BFS model.
+"""Shared-center CAS2F model with a controlled spectral BFS ablation.
+
+Set ``bfs_enabled=False`` to remove hidden-state fusion: each spectral
+direction is read out from its own state before the existing weighted output
+merge. No BFS parameters are created in this mode. ``True`` preserves the
+original BFS path and checkpoint layout. All other processing is unchanged.
 
 Purpose
 -------
@@ -155,7 +160,7 @@ SpatialSnakeMamba = DualMambaSpatialMamba
 
 
 class SpectralOSSMWithBFS(OSSM):
-    """Fuller spectral OSSM with BFS retained.
+    """Fuller spectral OSSM with optional BFS hidden-state fusion.
 
     The stock OSSM in ``rs_mamba_ss.py`` expects Conv2d when d_conv > 1,
     which is appropriate for spatial feature maps but not for the spectral
@@ -183,7 +188,11 @@ class SpectralOSSMWithBFS(OSSM):
         initialize="v0",
         forward_type="v3",
         bfs_groups=8,
+        bfs_enabled=True,
     ):
+        if not isinstance(bfs_enabled, bool):
+            raise ValueError("bfs_enabled must be a boolean")
+
         requested_d_conv = int(d_conv)
 
         # Use OSSM's full z/gate parameterization, but suppress its Conv2d
@@ -226,17 +235,22 @@ class SpectralOSSMWithBFS(OSSM):
         else:
             self.spectral_conv1d = nn.Identity()
 
-        self.state_fusion = BidirectionalFusionState(
-            d_inner=self.d_inner_bfs,
-            d_state=self.d_state_bfs,
-            groups=bfs_groups,
+        self.bfs_enabled = bfs_enabled
+        self.state_fusion = (
+            BidirectionalFusionState(
+                d_inner=self.d_inner_bfs,
+                d_state=self.d_state_bfs,
+                groups=bfs_groups,
+            )
+            if self.bfs_enabled
+            else None
         )
 
         # Keep the previously validated BFS direction readout.
         self.direction_logits = nn.Parameter(torch.zeros(2))
 
     def forward_bfs(self, sequence):
-        """Full OSSM-style spectral processing with BFS hidden-state fusion."""
+        """Spectral processing with optional BFS; retain the legacy method name."""
 
         if sequence.ndim != 3:
             raise ValueError(
@@ -360,7 +374,8 @@ class SpectralOSSMWithBFS(OSSM):
         )
 
         # --------------------------------------------------------------
-        # 6) Align two directions and apply retained BFS.
+        # 6) Align directions. Without BFS, preserve each direction's own
+        #    state for its C readout; an identity on their sum is NOT no-BFS.
         # --------------------------------------------------------------
         forward_state = states[:, 0]
         backward_state = torch.flip(
@@ -368,9 +383,12 @@ class SpectralOSSMWithBFS(OSSM):
             dims=[-1],
         )
 
-        fused_state = self.state_fusion(
-            forward_state + backward_state
-        )
+        if self.bfs_enabled:
+            fused_state = self.state_fusion(
+                forward_state + backward_state
+            )
+            forward_state = fused_state
+            backward_state = fused_state
 
         forward_c = state_c[:, 0].float()
         backward_c = torch.flip(
@@ -391,7 +409,7 @@ class SpectralOSSMWithBFS(OSSM):
 
         forward_output = (
             (
-                fused_state
+                forward_state
                 * forward_c.unsqueeze(1)
             ).sum(dim=2)
             + skip[0][None, :, None] * forward_u
@@ -399,7 +417,7 @@ class SpectralOSSMWithBFS(OSSM):
 
         backward_output = (
             (
-                fused_state
+                backward_state
                 * backward_c.unsqueeze(1)
             ).sum(dim=2)
             + skip[1][None, :, None] * backward_u
@@ -430,7 +448,7 @@ class SpectralOSSMWithBFS(OSSM):
 
 
 class SpectralCenterMamba(nn.Module):
-    """DualMamba-style center-pixel spectral branch + retained BFS.
+    """DualMamba-style center-pixel spectral branch with optional BFS.
 
     Shared feature x_dpe:
         [B,H,W,D]
@@ -457,6 +475,7 @@ class SpectralCenterMamba(nn.Module):
         spectral_ssm_init="v0",
         spectral_forward_type="v3",
         bfs_groups=8,
+        bfs_enabled=True,
     ):
         super().__init__()
 
@@ -479,6 +498,7 @@ class SpectralCenterMamba(nn.Module):
             initialize=spectral_ssm_init,
             forward_type=spectral_forward_type,
             bfs_groups=bfs_groups,
+            bfs_enabled=bfs_enabled,
         )
 
     def forward(self, x_dpe):
@@ -653,7 +673,7 @@ class CrossAttentionSpaSpeFusion(nn.Module):
 
 
 class BasicSpaSpeBlock(nn.Module):
-    """Shared DPE -> Spa OSSM / center Spe OSSM+BFS -> CAS2F -> FFN."""
+    """Shared DPE -> Spa / center Spe (optional BFS) -> CAS2F -> FFN."""
 
     def __init__(
         self,
@@ -669,6 +689,7 @@ class BasicSpaSpeBlock(nn.Module):
         spectral_ssm_conv=3,
         spectral_ssm_init="v0",
         bfs_groups=8,
+        bfs_enabled=True,
         **mamba_kwargs,
     ):
         super().__init__()
@@ -706,6 +727,7 @@ class BasicSpaSpeBlock(nn.Module):
             spectral_ssm_init=spectral_ssm_init,
             spectral_forward_type=spectral_forward_type,
             bfs_groups=bfs_groups,
+            bfs_enabled=bfs_enabled,
         )
 
         self.cross_fusion = CrossAttentionSpaSpeFusion(
@@ -758,7 +780,7 @@ class BasicSpaSpeBlock(nn.Module):
 
 
 class BasicSpaSpeMamba(nn.Module):
-    """CAS2MM-style backbone with fuller OSSM blocks and retained BFS."""
+    """CAS2MM-style backbone with fuller OSSM blocks and optional BFS."""
 
     def __init__(
         self,
@@ -789,6 +811,7 @@ class BasicSpaSpeMamba(nn.Module):
         spectral_ssm_conv=3,
         spectral_ssm_init="v0",
         bfs_groups=8,
+        bfs_enabled=True,
 
         **kwargs,
     ):
@@ -877,6 +900,7 @@ class BasicSpaSpeMamba(nn.Module):
                     spectral_ssm_conv=spectral_ssm_conv,
                     spectral_ssm_init=spectral_ssm_init,
                     bfs_groups=bfs_groups,
+                    bfs_enabled=bfs_enabled,
 
                     **mamba_kwargs,
                 )

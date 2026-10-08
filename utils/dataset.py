@@ -12,6 +12,7 @@ def load_mat_hsi(dataset_name, dataset_dir):
     available_sets = [
         'sa',
         'pu',
+        'up',
         'whulk',
         'hrl',
         'ip',
@@ -50,7 +51,7 @@ def load_mat_hsi(dataset_name, dataset_dir):
         rgb_bands = [0, 1, 2]  # to be edited
         undefined_label_index = 0
 
-    elif (dataset_name == 'pu'):
+    elif dataset_name in ('pu', 'up'):
         image = io.loadmat(os.path.join(dataset_dir, dataset_name, "PaviaU.mat"))
         image = image['paviaU']
         gt = io.loadmat(os.path.join(dataset_dir, dataset_name, "PaviaU_gt.mat"))
