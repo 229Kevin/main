@@ -17,6 +17,7 @@ from .ssmamba import ssmamba
 from .lightweight_spectral_mamba import lightweight_spectral_mamba
 from .zwk_hsi import ZWKHSI
 from .zwk_DMC import ZWKDMC
+from .zwk_DAM import ZWKDMCPSA, ZWKDMCPSADAM
 
 # from .basic_spa_spe_mamba import basic_spa_spe_mamba
 # from .basic_spa_spe_mamba_raster import basic_spa_spe_mamba
@@ -93,6 +94,12 @@ def get_model(model_config, model_name, dataset_name, patch_size):
 
     elif model_name == 'zwk_dmc':
         model = ZWKDMC(**model_config)
+
+    elif model_name == 'zwk_dmc_psa':
+        model = ZWKDMCPSA(**model_config)
+
+    elif model_name == 'zwk_dmc_psa_dam':
+        model = ZWKDMCPSADAM(**model_config)
 
     # elif model_name == 'basic_spa_spe_mamba':
     #     model = basic_spa_spe_mamba(model_config)

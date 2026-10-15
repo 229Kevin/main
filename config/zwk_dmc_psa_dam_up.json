@@ -1,0 +1,34 @@
+{
+    "model": {
+        "num_bands": 103,
+        "num_classes": 9,
+        "feature_dim": 64,
+        "groups": 4,
+        "region_size": 5,
+        "kernel_size": 3,
+        "local_dilation": 2,
+        "ffn_hidden_dim": 64,
+        "dropout": 0.1,
+        "psa_enabled": true,
+        "psa_num_heads": 2,
+        "psa_center_weighted": true,
+        "psa_center_sigma": 3.0,
+        "psa_pre_norm": true,
+        "dam_enabled": true,
+        "dam_d_state": 8,
+        "dam_ssm_ratio": 1.0,
+        "dam_dt_rank": 4,
+        "dam_direction_enabled": true,
+        "dam_scan_backend": "auto"
+    },
+    "schedule": {
+        "optimizer": {
+            "name": "AdamW",
+            "params": { "lr": 0.001 }
+        },
+        "lr_decay": {
+            "name": "StepLR",
+            "params": { "step_size": 30, "gamma": 0.9 }
+        }
+    }
+}

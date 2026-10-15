@@ -60,7 +60,7 @@ def load_scheduler(sch_config, model_name, model):
             optimizer = optim.Adam(model.parameters(), **sch_config['optimizer']['params'])
         elif opti_mode == 'AdamW':
             parameters = model.parameters()
-            if model_name == 'zwk_hsi' and hasattr(model, 'no_weight_decay'):
+            if model_name in ('zwk_hsi', 'zwk_dmc_psa_dam') and hasattr(model, 'no_weight_decay'):
                 excluded = model.no_weight_decay()
                 if excluded:
                     parameters = [

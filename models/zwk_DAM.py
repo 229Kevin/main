@@ -1,7 +1,11 @@
 """Standalone, patch-oriented Direction-Aware Mamba (DAM) adaptation.
 
-Input/output: [B, C, H, W]. This module returns ONLY an enhancement feature;
+ZWKDAM input/output: [B, C, H, W]. It returns ONLY an enhancement feature;
 the caller owns residual scaling and fusion with the CNN/PSA features.
+
+This file also provides the independent ZWKDMCPSA patch classifier requested
+for the first DMC+PSA ablation. That classifier does not instantiate ZWKDAM.
+ZWKDMCPSADAM extends it with one residual DAM after the residual PSA output.
 
 Architecture:
     channel LayerNorm -> shared 1x1 projection -> feature/gate split
@@ -35,7 +39,10 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-__all__ = ['ZWKDAM', 'build_scan_indices', 'selective_scan_reference']
+from .zwk_DMC import ZWKDMC, _check_features
+
+__all__ = ['ZWKDAM', 'ZWKDMCPSA', 'ZWKDMCPSADAM',
+           'build_scan_indices', 'selective_scan_reference']
 
 
 def _positive_integer(value, name):
@@ -249,3 +256,152 @@ class ZWKDAM(nn.Module):
         merged = merged.to(features.dtype)
         merged = self.output_norm(merged.movedim(1, -1)).movedim(-1, 1).contiguous()
         return self.dropout(self.out_proj(merged * F.silu(gate)))
+
+
+class ZWKDMCPSA(ZWKDMC):
+    """HSI projection -> DMC -> F + PSA(F) -> pool -> FFN -> classifier.
+
+    Reuses the unchanged DMC classifier's feature extractor and head. PSA is
+    the existing patch-adapted SingleLayerPSA: one layer, no downsampling,
+    two channel-attention heads, center-weighted Q/K and channel pre-norm.
+    The only outer fusion is unscaled elementwise addition, once before pool.
+    No DAM, extra CNN, learned fusion scalar or FFN residual is added.
+
+    psa_enabled=False reproduces the baseline (including its state_dict keys).
+    Shared DMC/head initialization and caller RNG are retained for a seeded
+    comparison. New checkpoints use model name zwk_dmc_psa; the zwk_dmc
+    baseline and its configuration remain available unchanged.
+    """
+
+    def __init__(self, num_bands=200, num_classes=16, feature_dim=64, groups=4,
+                 region_size=5, kernel_size=3, local_dilation=2, ffn_hidden_dim=64,
+                 dropout=0.1, deploy=False, psa_enabled=True, psa_num_heads=2,
+                 psa_center_weighted=True, psa_center_sigma=3.0, psa_pre_norm=True):
+        if not isinstance(psa_enabled, bool):
+            raise ValueError('psa_enabled must be boolean')
+        super().__init__(num_bands=num_bands, num_classes=num_classes,
+                         feature_dim=feature_dim, groups=groups, region_size=region_size,
+                         kernel_size=kernel_size, local_dilation=local_dilation,
+                         ffn_hidden_dim=ffn_hidden_dim, dropout=dropout, deploy=deploy)
+        self.psa_enabled = psa_enabled
+        # Initialize the extra branch after the complete baseline and restore
+        # RNG so dropout/data sampling starts from the same seeded state.
+        with torch.random.fork_rng(devices=[]):
+            if psa_enabled:
+                from .zwk_hsi import SingleLayerPSA
+                self.psa = SingleLayerPSA(
+                    feature_dim, num_heads=psa_num_heads, bias=True,
+                    center_weighted=psa_center_weighted, center_sigma=psa_center_sigma,
+                    pre_norm=psa_pre_norm)
+            else:
+                self.psa = nn.Identity()
+
+    def forward_features(self, x):
+        """Return the unchanged DMC+PSA feature map before pooling."""
+        if x.ndim == 5:
+            if x.shape[1] != 1:
+                raise ValueError('Five-dimensional HSI input must have shape [B, 1, bands, H, W]')
+            x = x[:, 0]
+        _check_features(x, self.num_bands)
+        features = self.dmc(self.input_projection(x))
+        if self.psa_enabled:
+            enhancement = self.psa(features)
+            if enhancement.shape != features.shape or enhancement.device != features.device:
+                raise RuntimeError('PSA output must match the DMC feature shape and device')
+            features = features + enhancement.to(dtype=features.dtype)
+        return features
+
+    def forward(self, x):
+        features = self.forward_features(x)
+        return self.classifier(self.ffn(self.pool(features).flatten(1)))
+
+    def flops(self, shape=None, verbose=True):
+        """Include PSA operations under the baseline profiler's counting rules."""
+        total = super().flops(shape=shape, verbose=False)
+        if verbose:
+            print(f'DMC+PSA FLOPs: {total / 1e9:.4f} GFLOPs')
+        return total
+
+
+class ZWKDMCPSADAM(ZWKDMCPSA):
+    """Serial residual classifier: F=DMC(X), P=F+PSA(F), Y=P+DAM(P).
+
+    Y alone is pooled and passed to the existing FFN/classifier. Each residual
+    is applied exactly once. DMC, PSA and the standalone ZWKDAM internals are
+    reused unchanged; no extra convolution, normalization, positional encoding,
+    fusion coefficient or FFN is introduced. The DAM retains all four paths,
+    its input/output normalization, gate, depthwise convolution and direction
+    compensation. dam_enabled=False recovers the DMC+PSA ablation exactly.
+    """
+
+    def __init__(self, num_bands=200, num_classes=16, feature_dim=64, groups=4,
+                 region_size=5, kernel_size=3, local_dilation=2, ffn_hidden_dim=64,
+                 dropout=0.1, deploy=False, psa_enabled=True, psa_num_heads=2,
+                 psa_center_weighted=True, psa_center_sigma=3.0, psa_pre_norm=True,
+                 dam_enabled=True, dam_d_state=8, dam_ssm_ratio=1.0,
+                 dam_dt_rank='auto', dam_direction_enabled=True,
+                 dam_scan_backend='auto'):
+        if not isinstance(dam_enabled, bool):
+            raise ValueError('dam_enabled must be boolean')
+        super().__init__(num_bands=num_bands, num_classes=num_classes,
+                         feature_dim=feature_dim, groups=groups, region_size=region_size,
+                         kernel_size=kernel_size, local_dilation=local_dilation,
+                         ffn_hidden_dim=ffn_hidden_dim, dropout=dropout, deploy=deploy,
+                         psa_enabled=psa_enabled, psa_num_heads=psa_num_heads,
+                         psa_center_weighted=psa_center_weighted,
+                         psa_center_sigma=psa_center_sigma, psa_pre_norm=psa_pre_norm)
+        self.dam_enabled = dam_enabled
+        # Keep the retained DMC/PSA/head weights and caller RNG unchanged.
+        with torch.random.fork_rng(devices=[]):
+            self.dam = (ZWKDAM(d_model=feature_dim, d_state=dam_d_state,
+                               ssm_ratio=dam_ssm_ratio, dt_rank=dam_dt_rank,
+                               direction_enabled=dam_direction_enabled,
+                               scan_backend=dam_scan_backend)
+                        if dam_enabled else nn.Identity())
+
+    def forward_features(self, x):
+        features = super().forward_features(x)  # P = F + PSA(F)
+        if self.dam_enabled:
+            enhancement = self.dam(features)    # DAM receives P, not F or PSA(F).
+            if enhancement.shape != features.shape or enhancement.device != features.device:
+                raise RuntimeError('DAM output must match the PSA residual feature shape and device')
+            features = features + enhancement.to(dtype=features.dtype)
+        return features
+
+    def no_weight_decay(self):
+        """Apply the existing DAM's exclusions through the optimizer factory."""
+        return {f'dam.{name}' for name in self.dam.no_weight_decay()} if self.dam_enabled else set()
+
+    def flops(self, shape=None, verbose=True):
+        """Approximate FLOPs, including SSM recurrence on CPU and CUDA equally.
+
+        Profile the retained DMC+PSA path with FVCore. Count DAM analytically
+        to avoid both CPU-loop unrolling and missing CUDA PythonOp costs.
+        Selective scan uses the repository's 9*B*L*D*N + B*L*D convention,
+        with D=paths*inner_channels. Conv/Linear use one op per multiply-add;
+        LayerNorm uses five per element. Count the final gate multiplication;
+        omit activations, Softmax, indexing and elementwise residual additions,
+        consistently with the baseline profiler's approximate counting rules.
+        Only an independent model copy is profiled; caller state/RNG are untouched.
+        """
+        import copy
+
+        shape = tuple(shape or (1, self.num_bands, 15, 15))
+        baseline = copy.deepcopy(self)
+        baseline.dam_enabled = False
+        total = ZWKDMCPSA.flops(baseline, shape=shape, verbose=False)
+        if self.dam_enabled:
+            batch, length = shape[0], shape[-2] * shape[-1]
+            dam = self.dam
+            channels, inner = dam.d_model, dam.d_inner
+            paths, rank, state = dam.num_paths, dam.dt_rank, dam.d_state
+            normalizations = 5 * batch * length * (channels + inner)
+            io_projections = batch * length * (channels * 2 * inner + inner * channels)
+            spatial = batch * length * inner * math.prod(dam.dwconv.kernel_size)
+            ssm_projections = batch * paths * length * inner * (2 * rank + 2 * state)
+            scan = 9 * batch * length * paths * inner * state + batch * length * paths * inner
+            gate = batch * length * inner
+            total += normalizations + io_projections + spatial + ssm_projections + scan + gate
+        if verbose:
+            print(f'DMC+PSA+DAM approximate FLOPs (including selective scan): {total / 1e9:.4f} GFLOPs')
+        return float(total)
