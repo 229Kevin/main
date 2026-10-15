@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.utils.data
 #from torchsummaryX import summary
 import os
-from utils.dataset import load_mat_hsi, sample_gt, HSIDataset, load_disjoint_data
+from utils.dataset import load_mat_hsi, sample_gt, sample_gt_hypyramamba, HSIDataset, load_disjoint_data
 #from utils.whu_ohs_dataset import WHU_OHS_Patch_Dataset
 from utils.utils import split_info_print, metrics, show_results
 from utils.scheduler import load_scheduler
@@ -59,8 +59,19 @@ if __name__ == "__main__":
     parser.add_argument("--bs", type=int, default=64)  # bs = batch size  
     parser.add_argument("--ratio", type=float, default=None,
                         help="training ratio (default: 0.05 for IP/UP, 0.1 for other datasets)")
+    parser.add_argument("--sampling_mode", choices=("ratio", "hy_fixed"), default="ratio",
+                        help="ratio: original protocol; hy_fixed: HyPyraMamba per-class train/val split")
+    parser.add_argument("--train_samples", type=int, default=30,
+                        help="hy_fixed training count per class (N <= count uses the source fallback of 15)")
+    parser.add_argument("--val_samples", type=int, default=10,
+                        help="hy_fixed independent validation count per class")
     parser.add_argument("--disjoint", type=bool, default=False)
     opts = parser.parse_args()
+    if opts.sampling_mode == "hy_fixed":
+        if opts.disjoint or opts.ratio is not None:
+            parser.error("hy_fixed cannot be combined with --disjoint or --ratio")
+        if opts.train_samples < 1 or opts.val_samples < 1:
+            parser.error("hy_fixed requires positive --train_samples and --val_samples")
     if opts.ratio is None:
         opts.ratio = 0.05 if opts.dataset_name in ('ip', 'up') else 0.1
     config_dir = os.path.join('config', '%s_%s.json' % (opts.model, opts.dataset_name))
@@ -69,7 +80,10 @@ if __name__ == "__main__":
     else:
         model_config = {}
     now_time = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    log_filename = '{}_{}_{}.log'.format(opts.model, opts.dataset_name, now_time)
+    split_tag = (str(opts.ratio) if opts.sampling_mode == "ratio"
+                 else f"hy_fixed_tr{opts.train_samples}_val{opts.val_samples}")
+    protocol_suffix = "" if opts.sampling_mode == "ratio" else "_" + split_tag
+    log_filename = '{}_{}{}_{}.log'.format(opts.model, opts.dataset_name, protocol_suffix, now_time)
     log_dir = os.path.join('logs', log_filename)
     setup_logging(log_dir)
     sys.stdout = StreamToLogger(logging.getLogger('STDOUT'), logging.INFO)
@@ -102,7 +116,11 @@ if __name__ == "__main__":
     print("patch size = {}".format(opts.patch_size))
     print("batch size = {}".format(opts.bs))
     print("total epoch = {}".format(opts.epoch))
-    print("{} for training and {} testing".format(opts.ratio, 1 - opts.ratio))
+    if opts.sampling_mode == "ratio":
+        print("{} for training and {} testing".format(opts.ratio, 1 - opts.ratio))
+    else:
+        print(f"HyPyraMamba fixed split: train={opts.train_samples}, val={opts.val_samples} per class")
+        print("Source fallback: classes with N <= train_samples use 15 training samples")
 
     if opts.dataset_name in ('ip', 'up'):
         seeds = [1, 34, 20031025, 9, 10, 11, 424124, 21213, 123, 29]
@@ -127,7 +145,19 @@ if __name__ == "__main__":
         '''trainval_gt, test_gt = sample_gt(gt, opts.ratio, seeds[run])
         train_gt, val_gt = sample_gt(trainval_gt, 0.5, seeds[run])
         del trainval_gt'''
-        if opts.disjoint:
+        if opts.sampling_mode == "hy_fixed":
+            train_gt, val_gt, test_gt = sample_gt_hypyramamba(
+                gt, opts.train_samples, opts.val_samples, seeds[run])
+            if not all(np.any(part >= 0) for part in (train_gt, val_gt, test_gt)):
+                parser.error("hy_fixed produced an empty train, validation, or test set")
+            print(f"seed = {seeds[run]}; train/val/test = "
+                  f"{np.sum(train_gt >= 0)}/{np.sum(val_gt >= 0)}/{np.sum(test_gt >= 0)}")
+            for c, label in enumerate(labels):
+                print(f"  {label}: train={np.sum(train_gt == c)}, "
+                      f"val={np.sum(val_gt == c)}, test={np.sum(test_gt == c)}")
+            missing_test = [labels[c] for c in range(num_classes) if not np.any(test_gt == c)]
+            print(f"AA uses nanmean over classes with test samples; excluded classes: {missing_test}")
+        elif opts.disjoint:
             train_gt, test_gt = load_disjoint_data(opts.dataset_name, opts.dataset_dir)
             train_gt -= 1
             print(len(np.where(train_gt > -1)[0]))
@@ -144,12 +174,13 @@ if __name__ == "__main__":
             print(len(np.where(train_gt > -1)[0]))
         else: 
             train_gt, test_gt = sample_gt(gt, opts.ratio, seeds[run])
-        val_gt = test_gt
+        if opts.sampling_mode == "ratio":
+            val_gt = test_gt
         #val_gt, _ = sample_gt(test_gt, 0.5, seeds[run])
         train_set = HSIDataset(image, train_gt, patch_size=opts.patch_size, data_aug=True)
         val_set = HSIDataset(image, val_gt, patch_size=opts.patch_size, data_aug=False)
         all_data_set = HSIDataset(image, gt, patch_size=opts.patch_size, data_aug=False)
-        train_loader = torch.utils.data.DataLoader(train_set, opts.bs, num_workers=8, pin_memory=True, drop_last=True, shuffle=True)
+        train_loader = torch.utils.data.DataLoader(train_set, opts.bs, num_workers=8, pin_memory=True, drop_last=(opts.sampling_mode == "ratio"), shuffle=True)
         val_loader = torch.utils.data.DataLoader(val_set, opts.bs, num_workers=8, pin_memory=True, drop_last=False, shuffle=False)
         all_data_loader = torch.utils.data.DataLoader(all_data_set, opts.bs, num_workers=8, pin_memory=True, drop_last=False, shuffle=False)
         # load model and loss
@@ -178,7 +209,7 @@ if __name__ == "__main__":
         criterion = nn.CrossEntropyLoss()
         
         # where to save checkpoint model
-        model_dir = "./checkpoints/" + opts.model + '/' + opts.dataset_name + '/' + str(opts.ratio) + '/' + now_time + '/'+ str(run)
+        model_dir = "./checkpoints/" + opts.model + '/' + opts.dataset_name + '/' + split_tag + '/' + now_time + '/'+ str(run)
 
         try:
             train(model, optimizer, criterion, train_loader, val_loader, opts.epoch, model_dir, device, scheduler)
@@ -189,11 +220,13 @@ if __name__ == "__main__":
         probabilities = test(model, model_dir, image, opts.patch_size, num_classes, device)
         prediction = np.argmax(probabilities, axis=-1)
         # computing metrics
-        run_results = metrics(prediction, test_gt, n_classes=num_classes)  # only for test set
+        run_results = metrics(prediction, test_gt, n_classes=num_classes,
+                              ignore_empty_classes=(opts.sampling_mode == "hy_fixed"))  # only for test set
         results.append(run_results)
         show_results(run_results, label_values=labels)
         if run==0:               
-            get_cls_map.get_cls_map(prediction, gt, height, width, opts.dataset_name, opts.ratio, opts.model)
+            get_cls_map.get_cls_map(prediction, gt, height, width, opts.dataset_name,
+                                    opts.ratio if opts.sampling_mode == "ratio" else split_tag, opts.model)
         del model, train_set, train_loader
 
     if opts.num_run > 1:

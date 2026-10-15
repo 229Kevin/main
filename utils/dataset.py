@@ -231,6 +231,36 @@ def sample_gt(gt, percentage, seed):
     return train_gt, test_gt
 
 
+def sample_gt_hypyramamba(gt, train_samples=30, val_samples=10, seed=1):
+    """Reproduce HyPyraMamba's fixed per-class split on zero-based labels.
+
+    Source: HypraMamba/data_load_operate.py, sampling(..., Flag=1).
+    Classes with N > train_samples use train_samples training pixels;
+    otherwise the source uses 15. Validation takes up to val_samples from
+    the remainder, then test gets the rest. An empty class test set is
+    possible (e.g. IN Oats: 15 train, 5 validation, 0 test).
+    A local RandomState reproduces seeded numpy.shuffle without changing
+    the existing proportion-sampling protocol's global RNG state.
+    """
+    for name, value, minimum in (("train_samples", train_samples, 1),
+                                 ("val_samples", val_samples, 0)):
+        if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < minimum:
+            raise ValueError(f"{name} must be an integer >= {minimum}")
+    rng = np.random.RandomState(seed)
+    flat = gt.ravel()
+    parts = [np.full_like(flat, -1) for _ in range(3)]
+    for label in np.unique(flat[flat >= 0]):
+        indices = np.flatnonzero(flat == label)
+        rng.shuffle(indices)
+        train_count = train_samples if len(indices) > train_samples else 15
+        selected = (indices[:train_count],
+                    indices[train_count:train_count + val_samples],
+                    indices[train_count + val_samples:])
+        for output, positions in zip(parts, selected):
+            output[positions] = flat[positions]
+    return tuple(part.reshape(gt.shape) for part in parts)
+
+
 class HSIDataset(torch.utils.data.Dataset):
     def __init__(self, image, gt, patch_size, data_aug=True):
         """

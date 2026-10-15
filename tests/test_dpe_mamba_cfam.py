@@ -74,6 +74,8 @@ class TunedModelContracts(unittest.TestCase):
 
     def test_single_block_honors_configured_drop_path(self):
         config = json.loads((PROJECT / 'config/basic_spa_spe_mamba_ip.json').read_text())['model']
+        # This regression exercises the archived original CFAM architecture.
+        config['fusion_type'] = 'center_cfam_residual'
         model = BasicSpaSpeMamba(**config)
         self.assertAlmostEqual(getattr(model.blocks[0].drop_path, 'drop_prob', 0), 0.1)
 

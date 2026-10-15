@@ -59,7 +59,16 @@ def load_scheduler(sch_config, model_name, model):
         if opti_mode == 'Adam':
             optimizer = optim.Adam(model.parameters(), **sch_config['optimizer']['params'])
         elif opti_mode == 'AdamW':
-            optimizer = optim.AdamW(model.parameters(), **sch_config['optimizer']['params'])
+            parameters = model.parameters()
+            if model_name == 'zwk_hsi' and hasattr(model, 'no_weight_decay'):
+                excluded = model.no_weight_decay()
+                if excluded:
+                    parameters = [
+                        {'params': [p for n, p in model.named_parameters() if n not in excluded]},
+                        {'params': [p for n, p in model.named_parameters() if n in excluded],
+                         'weight_decay': 0.0},
+                    ]
+            optimizer = optim.AdamW(parameters, **sch_config['optimizer']['params'])
         elif opti_mode == 'SGD':
             optimizer = optim.SGD(model.parameters(), **sch_config['optimizer']['params'])
         if lr_mode == 'StepLR':

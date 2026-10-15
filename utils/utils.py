@@ -72,13 +72,14 @@ def grouper(n, iterable):
         yield chunk
 
 
-def metrics(prediction, target, n_classes=None):
+def metrics(prediction, target, n_classes=None, ignore_empty_classes=False):
     """Compute and print metrics (accuracy, confusion matrix and F1 scores).
 
     Args:
         prediction: list of predicted labels
         target: list of target labels
         n_classes (optional): number of classes, max(target) by default
+        ignore_empty_classes: HyPyraMamba AA over classes with test samples
     Returns:
         accuracy, accuracy by class, confusion matrix
     """
@@ -107,6 +108,9 @@ def metrics(prediction, target, n_classes=None):
     # Compute accuracy of each class
     class_acc = np.zeros(len(cm))
     for i in range(len(cm)):
+        if ignore_empty_classes and np.sum(cm[i, :]) == 0:
+            class_acc[i] = np.nan
+            continue
         try:
             acc = cm[i, i] / np.sum(cm[i, :])
         except ZeroDivisionError:
@@ -114,7 +118,9 @@ def metrics(prediction, target, n_classes=None):
         class_acc[i] = acc
 
     results["class acc"] = class_acc * 100.0
-    results['AA'] = np.mean(class_acc) * 100.0
+    # HyPyraMamba's Evaluator.Pixel_Accuracy_Class uses nanmean.
+    mean_acc = np.nanmean if ignore_empty_classes else np.mean
+    results['AA'] = mean_acc(class_acc) * 100.0
     # Compute kappa coefficient
     pa = np.trace(cm) / float(total)
     pe = np.sum(np.sum(cm, axis=0) * np.sum(cm, axis=1)) / \

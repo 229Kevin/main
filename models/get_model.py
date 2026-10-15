@@ -15,15 +15,22 @@ from .msrnn import msrnn
 from .msrt import msrt
 from .ssmamba import ssmamba
 from .lightweight_spectral_mamba import lightweight_spectral_mamba
+from .zwk_hsi import ZWKHSI
+from .zwk_DMC import ZWKDMC
 
 # from .basic_spa_spe_mamba import basic_spa_spe_mamba
 # from .basic_spa_spe_mamba_raster import basic_spa_spe_mamba
 # from .basic_spa_spe_mamba_dualspa import basic_spa_spe_mamba
 # from .basic_spa_spe_mamba_dualossm_bfs import basic_spa_spe_mamba
 # from .basic_spa_spe_mamba_dualossm_cas2f_bfs import basic_spa_spe_mamba
-# from .basic_spa_spe_mamba_sharedcenter_cas2f_bfs import basic_spa_spe_mamba
-from .DPE_Mamba_CFAM import basic_spa_spe_mamba
+# from .basic_spa_spe_mamba_fullossm_sharedcenter_cas2f_bfs import basic_spa_spe_mamba
+# from .basic_spa_spe_mamba_deep import basic_spa_spe_mamba
 
+# from .DPE_Mamba_newCFAM import basic_spa_spe_mamba
+# from .newDPE_mamba_CFAM import basic_spa_spe_mamba as mamba_no_dpe
+from .newDPE_mamba_CFAM import basic_spa_spe_mamba as mamba_shared_psa
+from .newDPE_mamba_CFAM import basic_spa_spe_mamba as mamba_shared_psa_aedc
+# from .PSA_newmamba_CFAM import basic_spa_spe_mamba as mamba_shared_psa
 
 from .cas2mm_only_rebuilt_v2 import asf_rsm_group
 
@@ -81,8 +88,23 @@ def get_model(model_config, model_name, dataset_name, patch_size):
     elif model_name == 'lightweight_spectral_mamba':
         model = lightweight_spectral_mamba(model_config)
 
-    elif model_name == 'basic_spa_spe_mamba':
-        model = basic_spa_spe_mamba(model_config)
+    elif model_name == 'zwk_hsi':
+        model = ZWKHSI(**model_config)
+
+    elif model_name == 'zwk_dmc':
+        model = ZWKDMC(**model_config)
+
+    # elif model_name == 'basic_spa_spe_mamba':
+    #     model = basic_spa_spe_mamba(model_config)
+
+    # elif model_name == 'mamba_no_dpe':
+    #     model = mamba_no_dpe(model_config)
+
+    elif model_name == 'mamba_shared_psa':
+        model = mamba_shared_psa(model_config)
+
+    elif model_name == 'mamba_shared_psa_aedc':
+        model = mamba_shared_psa_aedc(model_config)
 
 
     elif model_name == 'msrnn':

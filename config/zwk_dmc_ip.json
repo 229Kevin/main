@@ -1,0 +1,23 @@
+{
+    "model": {
+        "num_bands": 200,
+        "num_classes": 16,
+        "feature_dim": 64,
+        "groups": 4,
+        "region_size": 5,
+        "kernel_size": 3,
+        "local_dilation": 2,
+        "ffn_hidden_dim": 64,
+        "dropout": 0.1
+    },
+    "schedule": {
+        "optimizer": {
+            "name": "AdamW",
+            "params": { "lr": 0.001 }
+        },
+        "lr_decay": {
+            "name": "StepLR",
+            "params": { "step_size": 30, "gamma": 0.9 }
+        }
+    }
+}
